@@ -24,7 +24,7 @@ class DataCleaner:
     def __init__(
         self,
         api_key: str,
-        model: str = "gpt-4o",
+        model: str = "gpt-4o-2024-08-06",
         max_retries: int = 3,
         retry_delay: int = 5,
         batch_size: int = 20,
@@ -75,9 +75,24 @@ class DataCleaner:
             working_df = df[[column]].copy()
             working_df.reset_index(inplace=True)
             
-            # Get prompt and schema from instructions
+            # Get prompt, schema, and expected output structure from instructions
             prompt = instruction.get("prompt", "")
             schema = instruction.get("schema")  # This is optional
+            
+            # Include the expected output format in the prompt when there's a schema
+            if schema:
+                # Extract required field names from schema
+                required_fields = schema.get("required", [])
+                properties = schema.get("properties", {})
+                
+                # Add output structure guidance to the prompt
+                field_guidance = ""
+                for field in required_fields:
+                    field_type = properties.get(field, {}).get("type", "any")
+                    field_guidance += f"- '{field}': {field_type}\n"
+                
+                output_guidance = f"\nYour response must be a JSON object with exactly these fields:\n{field_guidance}"
+                prompt += output_guidance
             
             # Process in batches
             batches = batch_dataframe(working_df, self.batch_size)
@@ -136,63 +151,118 @@ class DataCleaner:
         result_batch = batch.copy()
         result_batch[f"cleaned_{column}"] = None
         
-        # Filter out NaN values
-        valid_data = [(idx, str(val)) for idx, val in batch[column].items() if not pd.isna(val)]
-        
-        # Set NaN results for empty values
         for idx, row in batch.iterrows():
-            if pd.isna(row[column]):
+            value = row[column]
+            
+            if pd.isna(value):
                 result_batch.at[idx, f"cleaned_{column}"] = json.dumps({"error": "Original value is NaN"})
-        
-        if not valid_data:
-            return result_batch
+                continue
             
-        # Process the valid data as a batch
-        indices, values = zip(*valid_data)
-        
-        # Prepare the message for the API with the entire batch
-        messages = [
-            {"role": "system", "content": "You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. Respond with valid JSON."},
-            {"role": "user", "content": f"{prompt}\n\nData to clean:\n{json.dumps(list(values))}\n\nRespond with a valid JSON array containing one result object per input item, in the same order."}
-        ]
-        
-        # Call the OpenAI API with retry logic
-        cleaned_values = self._call_openai_with_retry(messages, schema, len(indices))
-        
-        # Store the results
-        for i, idx in enumerate(indices):
-            if i < len(cleaned_values):
-                result = cleaned_values[i]
-                
-                # Validate schema if provided
-                if schema:
-                    try:
-                        validate(instance=result, schema=schema)
-                    except ValidationError as e:
-                        result = {"error": f"Schema validation failed: {str(e)}", "data": result}
-                
-                result_batch.at[idx, f"cleaned_{column}"] = json.dumps(result)
-            else:
-                result_batch.at[idx, f"cleaned_{column}"] = json.dumps({"error": "No result returned from API"})
+            # Process individual value
+            messages = [
+                {"role": "system", "content": "You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. Respond with valid JSON."},
+                {"role": "user", "content": f"{prompt}\n\nData to clean: {value}\n\nRespond with a valid JSON object."}
+            ]
             
+            cleaned_value = self._call_openai_with_retry(messages, schema)
+            
+            # Normalize keys if schema is provided
+            if schema and "properties" in schema and isinstance(cleaned_value, dict):
+                normalized_value = self._normalize_keys(cleaned_value, schema)
+                
+                # Validate the normalized value
+                try:
+                    validate(instance=normalized_value, schema=schema)
+                    cleaned_value = normalized_value
+                except ValidationError as e:
+                    cleaned_value = {"error": f"Schema validation failed: {str(e)}", "data": cleaned_value}
+            
+            result_batch.at[idx, f"cleaned_{column}"] = json.dumps(cleaned_value)
+        
         return result_batch
+        
+    def _normalize_keys(self, data: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize keys in the response to match the schema.
+        This handles cases where the model returns different key names than the schema expects.
+        
+        Args:
+            data: The data to normalize
+            schema: The JSON schema with expected keys
+            
+        Returns:
+            Normalized data with keys that match the schema
+        """
+        if not isinstance(data, dict) or not schema or "properties" not in schema:
+            return data
+            
+        required_keys = schema.get("properties", {}).keys()
+        
+        # Simple case: keys already match the schema
+        if all(key in data for key in required_keys):
+            return data
+            
+        # Try to normalize common key variations
+        normalized = {}
+        key_mapping = {}
+        
+        # Generate potential mappings from actual keys to schema keys
+        for schema_key in required_keys:
+            # Various common transformations of keys
+            variations = [
+                schema_key,                           # exact match
+                schema_key.lower(),                   # lowercase
+                schema_key.upper(),                   # uppercase
+                schema_key.replace("_", ""),          # no underscores
+                f"{schema_key}_value",                # with _value suffix
+                f"{schema_key}_name",                 # with _name suffix
+                f"{schema_key}_date",                 # with _date suffix
+                schema_key.replace("_", " "),         # spaces instead of underscores
+                f"{schema_key.split('_')[0]}",        # first part of compound key
+                f"{schema_key.split('_')[-1]}"        # last part of compound key
+            ]
+            
+            # Look for similar keys in the data
+            for data_key in data.keys():
+                if data_key in variations or schema_key in data_key.lower():
+                    key_mapping[data_key] = schema_key
+                    break
+                    
+        # If we have mappings, apply them
+        for data_key, schema_key in key_mapping.items():
+            normalized[schema_key] = data[data_key]
+            
+        # For any remaining schema keys, check if there are obvious matches in the data
+        for schema_key in required_keys:
+            if schema_key not in normalized:
+                for data_key in data.keys():
+                    # Try to match keys based on similarity
+                    if (data_key.lower() in schema_key.lower() or 
+                        schema_key.lower() in data_key.lower()):
+                        normalized[schema_key] = data[data_key]
+                        break
+                        
+        # If we still don't have all required keys, set the missing ones to None
+        for schema_key in required_keys:
+            if schema_key not in normalized:
+                normalized[schema_key] = None
+                
+        return normalized
 
     def _call_openai_with_retry(
         self, 
         messages: List[Dict[str, str]], 
-        schema: Optional[Dict[str, Any]] = None,
-        batch_size: int = 1
-    ) -> List[Dict[str, Any]]:
+        schema: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Call OpenAI API with retry logic.
 
         Args:
             messages: List of message dictionaries
             schema: JSON schema for validation (optional)
-            batch_size: Number of items we expect in the response
 
         Returns:
-            Cleaned data as a list of dictionaries
+            Cleaned data as a dictionary
         """
         for attempt in range(self.max_retries):
             try:
@@ -205,40 +275,20 @@ class DataCleaner:
                 
                 # Parse the response
                 try:
-                    parsed_response = json.loads(response.choices[0].message.content)
-                    
-                    # Handle different response formats
-                    if isinstance(parsed_response, list):
-                        return parsed_response
-                    elif isinstance(parsed_response, dict) and 'results' in parsed_response:
-                        return parsed_response['results']
-                    else:
-                        # If we only have one item or the response is not properly formatted
-                        if batch_size == 1:
-                            return [parsed_response]
-                        else:
-                            # If this was supposed to be a batch but we got a single object
-                            logger.warning("Expected batch results but got a single object. Attempting another retry.")
-                            if attempt < self.max_retries - 1:
-                                time.sleep(self.retry_delay)
-                                continue
-                            else:
-                                # Return the single response duplicated as a last resort
-                                return [parsed_response] * batch_size
-                
+                    return json.loads(response.choices[0].message.content)
                 except json.JSONDecodeError:
                     if attempt < self.max_retries - 1:
                         logger.warning(f"Failed to parse JSON response. Retrying ({attempt + 1}/{self.max_retries})...")
                         time.sleep(self.retry_delay)
                     else:
-                        return [{"error": "Failed to parse JSON response"}] * batch_size
+                        return {"error": "Failed to parse JSON response"}
             
             except Exception as e:
                 if attempt < self.max_retries - 1:
                     logger.warning(f"API call failed: {str(e)}. Retrying ({attempt + 1}/{self.max_retries})...")
                     time.sleep(self.retry_delay)
                 else:
-                    return [{"error": f"API call failed: {str(e)}"}] * batch_size
+                    return {"error": f"API call failed: {str(e)}"}
         
         # If we get here, all retries failed
-        return [{"error": "Failed after maximum retries"}] * batch_size
+        return {"error": "Failed after maximum retries"}
