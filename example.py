@@ -1,24 +1,27 @@
-# LLM Data Cleaner
-
-A Python package for cleaning data using OpenAI API. This package allows you to define cleaning instructions for each column in a CSV file and process them using OpenAI's language models.
-
-## Installation
-
-```bash
-pip install llm-data-cleaner
-```
-
-Or with Poetry:
-
-```bash
-poetry add llm-data-cleaner
-```
-
-## Usage
-
-```python
+import os
 import pandas as pd
 from llm_data_cleaner import DataCleaner
+
+# Set your OpenAI API key
+api_key = os.environ.get("OPENAI_API_KEY", "your-api-key-here")
+
+# Create a sample DataFrame
+data = {
+    "education": [
+        "BS from Technical University of Budapest, 2005",
+        "Master's degree from Eotvos Lorand University in Budapest (ELTE), 2018",
+        "No higher education",
+        "PhD in Computer Science, CEU, 2010"
+    ],
+    "job_title": [
+        "sw engineer",
+        "Senior Software Architect",
+        "Jr. Data Scientist",
+        "Chief Technology Officer"
+    ]
+}
+
+df = pd.DataFrame(data)
 
 # Define cleaning instructions
 cleaning_instructions = {
@@ -39,24 +42,16 @@ cleaning_instructions = {
 }
 
 # Initialize the cleaner
-cleaner = DataCleaner(api_key="your-openai-api-key")
+cleaner = DataCleaner(api_key=api_key)
 
 # Clean the data
-df = pd.read_csv("your_data.csv")
 result = cleaner.clean_dataframe(df, cleaning_instructions)
 
-# Output results
+# Display results
+print("Original Data:")
+print(df)
+print("\nCleaned Data:")
 print(result)
-```
 
-## Features
-
-- Process CSV data using OpenAI API
-- Define custom cleaning prompts for each column
-- Optional JSON schema validation for responses
-- Batch processing to handle rate limits
-- Progress tracking with tqdm
-
-## License
-
-MIT
+# You can also save the results to a CSV file
+result.to_csv("cleaned_data.csv", index=False)
