@@ -23,10 +23,11 @@ data = {
 
 df = pd.DataFrame(data)
 
-# Define cleaning instructions
+# Define cleaning instructions - schema is optional
 cleaning_instructions = {
     "education": {
         "prompt": "The rows below contain education experience of individuals residing in Hungary. Extract the year of higher education degree (may be None) and the precise, non abbreviated name of the university (may be None).",
+        # Optional schema
         "schema": {
             "type": "object",
             "properties": {
@@ -38,11 +39,16 @@ cleaning_instructions = {
     },
     "job_title": {
         "prompt": "Standardize the job title according to industry standards. Return the standardized job title."
+        # No schema for this column
     }
 }
 
-# Initialize the cleaner
-cleaner = DataCleaner(api_key=api_key)
+# Initialize the cleaner with batch processing
+cleaner = DataCleaner(
+    api_key=api_key,
+    batch_size=20,     # DataFrame batch size
+    api_batch_size=4   # Process up to 4 rows in a single API call
+)
 
 # Clean the data
 result = cleaner.clean_dataframe(df, cleaning_instructions)
