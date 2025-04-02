@@ -28,7 +28,6 @@ class DataCleaner:
         max_retries: int = 3,
         retry_delay: int = 5,
         batch_size: int = 20,
-        api_batch_size: int = 5,
         temperature: float = 0.0,
     ):
         """
@@ -39,8 +38,7 @@ class DataCleaner:
             model: OpenAI model to use
             max_retries: Maximum number of retry attempts for API calls
             retry_delay: Delay between retry attempts in seconds
-            batch_size: Number of rows to process in a dataframe batch
-            api_batch_size: Number of rows to process in a single API call
+            batch_size: Number of rows to process in a batch
             temperature: Temperature setting for the OpenAI API
         """
         self.client = OpenAI(api_key=api_key)
@@ -48,7 +46,6 @@ class DataCleaner:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.batch_size = batch_size
-        self.api_batch_size = api_batch_size
         self.temperature = temperature
 
     def clean_dataframe(
@@ -139,55 +136,44 @@ class DataCleaner:
         result_batch = batch.copy()
         result_batch[f"cleaned_{column}"] = None
         
-        # Split the batch into API batch chunks to send multiple rows per API call
-        api_batches = [
-            batch.iloc[i:i+self.api_batch_size] 
-            for i in range(0, len(batch), self.api_batch_size)
+        # Filter out NaN values
+        valid_data = [(idx, str(val)) for idx, val in batch[column].items() if not pd.isna(val)]
+        
+        # Set NaN results for empty values
+        for idx, row in batch.iterrows():
+            if pd.isna(row[column]):
+                result_batch.at[idx, f"cleaned_{column}"] = json.dumps({"error": "Original value is NaN"})
+        
+        if not valid_data:
+            return result_batch
+            
+        # Process the valid data as a batch
+        indices, values = zip(*valid_data)
+        
+        # Prepare the message for the API with the entire batch
+        messages = [
+            {"role": "system", "content": "You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. Respond with valid JSON."},
+            {"role": "user", "content": f"{prompt}\n\nData to clean:\n{json.dumps(list(values))}\n\nRespond with a valid JSON array containing one result object per input item, in the same order."}
         ]
         
-        for api_batch in api_batches:
-            # Prepare data for this API batch
-            batch_data = []
-            batch_indices = []
-            
-            for idx, row in api_batch.iterrows():
-                original_value = row[column]
-                if pd.isna(original_value):
-                    result_batch.at[idx, f"cleaned_{column}"] = json.dumps({"error": "Original value is NaN"})
-                else:
-                    batch_data.append(str(original_value))
-                    batch_indices.append(idx)
-            
-            # If we have data to process in this API batch
-            if batch_data:
-                # Prepare the message for the API with multiple items
-                messages = [
-                    {"role": "system", "content": "You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. Respond with valid JSON for each item in the array."},
-                    {"role": "user", "content": f"{prompt}\n\nData to clean (process each item separately):\n{json.dumps(batch_data)}\n\nRespond with a JSON array containing one cleaned result per input item, in the same order. Each result should be a JSON object."}
-                ]
+        # Call the OpenAI API with retry logic
+        cleaned_values = self._call_openai_with_retry(messages, schema, len(indices))
+        
+        # Store the results
+        for i, idx in enumerate(indices):
+            if i < len(cleaned_values):
+                result = cleaned_values[i]
                 
-                # Call the OpenAI API with retry logic
-                response_data = self._call_openai_with_retry(messages, schema, batch_size=len(batch_data))
+                # Validate schema if provided
+                if schema:
+                    try:
+                        validate(instance=result, schema=schema)
+                    except ValidationError as e:
+                        result = {"error": f"Schema validation failed: {str(e)}", "data": result}
                 
-                # Process the results
-                if isinstance(response_data, list) and len(response_data) == len(batch_indices):
-                    # Store each result with its corresponding index
-                    for i, (idx, result) in enumerate(zip(batch_indices, response_data)):
-                        # Validate against schema if provided
-                        if schema and not isinstance(result, dict):
-                            result = {"error": "Response is not a valid JSON object"}
-                        elif schema:
-                            try:
-                                validate(instance=result, schema=schema)
-                            except ValidationError as e:
-                                result = {"error": f"Schema validation failed: {str(e)}", "data": result}
-                        
-                        result_batch.at[idx, f"cleaned_{column}"] = json.dumps(result)
-                else:
-                    # Handle error cases where we don't get the expected response format
-                    error_msg = {"error": "Invalid API response format"}
-                    for idx in batch_indices:
-                        result_batch.at[idx, f"cleaned_{column}"] = json.dumps(error_msg)
+                result_batch.at[idx, f"cleaned_{column}"] = json.dumps(result)
+            else:
+                result_batch.at[idx, f"cleaned_{column}"] = json.dumps({"error": "No result returned from API"})
             
         return result_batch
 
@@ -196,7 +182,7 @@ class DataCleaner:
         messages: List[Dict[str, str]], 
         schema: Optional[Dict[str, Any]] = None,
         batch_size: int = 1
-    ) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """
         Call OpenAI API with retry logic.
 
@@ -206,7 +192,7 @@ class DataCleaner:
             batch_size: Number of items we expect in the response
 
         Returns:
-            Cleaned data as a list of dictionaries (for batch) or a single dictionary
+            Cleaned data as a list of dictionaries
         """
         for attempt in range(self.max_retries):
             try:
@@ -219,56 +205,40 @@ class DataCleaner:
                 
                 # Parse the response
                 try:
-                    response_text = response.choices[0].message.content
-                    cleaned_data = json.loads(response_text)
+                    parsed_response = json.loads(response.choices[0].message.content)
                     
-                    # For batch responses, ensure we have a list of the right size
-                    if batch_size > 1:
-                        if isinstance(cleaned_data, list) and len(cleaned_data) == batch_size:
-                            return cleaned_data
-                        elif isinstance(cleaned_data, dict) and 'results' in cleaned_data and isinstance(cleaned_data['results'], list):
-                            # Handle case where API returns {"results": [...]}
-                            return cleaned_data['results']
+                    # Handle different response formats
+                    if isinstance(parsed_response, list):
+                        return parsed_response
+                    elif isinstance(parsed_response, dict) and 'results' in parsed_response:
+                        return parsed_response['results']
+                    else:
+                        # If we only have one item or the response is not properly formatted
+                        if batch_size == 1:
+                            return [parsed_response]
                         else:
-                            # Try to interpret as a list if it's not already
-                            logger.warning(f"Expected list of {batch_size} items but got different format. Attempting to fix.")
-                            if isinstance(cleaned_data, dict):
-                                # Sometimes the API returns a dictionary with numbered keys
-                                if all(str(i) in cleaned_data for i in range(batch_size)):
-                                    return [cleaned_data[str(i)] for i in range(batch_size)]
-                            
-                            # If we can't interpret as a list, log error and retry
+                            # If this was supposed to be a batch but we got a single object
+                            logger.warning("Expected batch results but got a single object. Attempting another retry.")
                             if attempt < self.max_retries - 1:
-                                logger.warning(f"Received wrong response format. Retrying ({attempt + 1}/{self.max_retries})...")
                                 time.sleep(self.retry_delay)
                                 continue
                             else:
-                                return [{"error": "Failed to get proper batch response"} for _ in range(batch_size)]
-                    
-                    return cleaned_data
-                    
+                                # Return the single response duplicated as a last resort
+                                return [parsed_response] * batch_size
+                
                 except json.JSONDecodeError:
                     if attempt < self.max_retries - 1:
                         logger.warning(f"Failed to parse JSON response. Retrying ({attempt + 1}/{self.max_retries})...")
                         time.sleep(self.retry_delay)
                     else:
-                        if batch_size > 1:
-                            return [{"error": "Failed to parse JSON response"} for _ in range(batch_size)]
-                        else:
-                            return {"error": "Failed to parse JSON response"}
+                        return [{"error": "Failed to parse JSON response"}] * batch_size
             
             except Exception as e:
                 if attempt < self.max_retries - 1:
                     logger.warning(f"API call failed: {str(e)}. Retrying ({attempt + 1}/{self.max_retries})...")
                     time.sleep(self.retry_delay)
                 else:
-                    if batch_size > 1:
-                        return [{"error": f"API call failed: {str(e)}"} for _ in range(batch_size)]
-                    else:
-                        return {"error": f"API call failed: {str(e)}"}
+                    return [{"error": f"API call failed: {str(e)}"}] * batch_size
         
         # If we get here, all retries failed
-        if batch_size > 1:
-            return [{"error": "Failed after maximum retries"} for _ in range(batch_size)]
-        else:
-            return {"error": "Failed after maximum retries"}
+        return [{"error": "Failed after maximum retries"}] * batch_size

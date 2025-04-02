@@ -43,11 +43,10 @@ cleaning_instructions = {
     }
 }
 
-# Initialize the cleaner with batch processing
+# Initialize the cleaner with a batch size (default is 20)
 cleaner = DataCleaner(
     api_key=api_key,
-    batch_size=20,     # DataFrame batch size
-    api_batch_size=4   # Process up to 4 rows in a single API call
+    batch_size=20  # Process up to 20 rows in a single API call
 )
 
 # Clean the data
