@@ -3,7 +3,7 @@ import pandas as pd
 from llm_data_cleaner import DataCleaner
 
 # Set your OpenAI API key
-api_key = os.environ.get("OPENAI_API_KEY", "your-api-key-here")
+api_key = os.environ.get("OPENAI_API_KEY", "")
 
 # Create a sample DataFrame
 data = {

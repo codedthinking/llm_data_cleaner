@@ -80,7 +80,11 @@ class DataCleaner:
             schema = instruction.get("schema")  # This is optional
             
             # Include the expected output format in the prompt when there's a schema
+            # result may be a literal string etc, this is in the schema. or it is an object or an array
             if schema:
+                if schema.get("type") == "object":
+                    # Add schema type to the prompt
+                    prompt += f"\nThe expected output is a JSON object with the following structure:\n"
                 # Extract required field names from schema
                 required_fields = schema.get("required", [])
                 properties = schema.get("properties", {})
@@ -160,8 +164,8 @@ class DataCleaner:
             
             # Process individual value
             messages = [
-                {"role": "system", "content": "You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. Respond with valid JSON."},
-                {"role": "user", "content": f"{prompt}\n\nData to clean: {value}\n\nRespond with a valid JSON object."}
+                {"role": "system", "content": "You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. Respond with valid JSON literal (string, number, boolean or null), or JSON array, or JSON object."},
+                {"role": "user", "content": f"{prompt}\n\nData to clean: {value}"}
             ]
             
             cleaned_value = self._call_openai_with_retry(messages, schema)
@@ -270,12 +274,17 @@ class DataCleaner:
                     model=self.model,
                     messages=messages,
                     temperature=self.temperature,
-                    response_format={"type": "json_object"}
-                )
+                    text=dict(
+                        format=dict(
+                            type="json_schema",
+                            name="value",
+                            schema=schema),
+                        strict=True)
+                )       
                 
                 # Parse the response
                 try:
-                    return json.loads(response.choices[0].message.content)
+                    return json.loads(response.output_text)
                 except json.JSONDecodeError:
                     if attempt < self.max_retries - 1:
                         logger.warning(f"Failed to parse JSON response. Retrying ({attempt + 1}/{self.max_retries})...")
