@@ -5,13 +5,13 @@ A Python package for cleaning data using OpenAI API. This package allows you to 
 ## Installation
 
 ```bash
-pip install git+https://github.com/korenmiklos/llm_data_cleaner.git
+pip install git+https://github.com/codedthinking/llm_data_cleaner.git
 ```
 
 Or with Poetry:
 
 ```bash
-poetry add git+https://github.com/korenmiklos/llm_data_cleaner.git
+poetry add git+https://github.com/codedthinking/llm_data_cleaner.git
 ```
 
 ## Usage
