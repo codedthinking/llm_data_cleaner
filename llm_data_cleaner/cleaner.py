@@ -178,7 +178,7 @@ class DataCleaner:
             print(f"Cleaned value: {cleaned_value}")
 
         for key in cleaned_value.keys():
-            result_batch[f"cleaned_{column}"] = cleaned_value.get(key, None)
+            result_batch[key] = cleaned_value.get(key, None)
         
         return result_batch
         
