@@ -31,8 +31,14 @@ cleaning_instructions = {
         "schema": {
             "type": "object",
             "properties": {
-                "year": {"type": ["integer", "null"]},
-                "university": {"type": ["string", "null"]}
+                "year": {
+                    "type": "array",
+                    "items": {"type": ["integer", "null"]}
+                },
+                "university": {
+                    "type": "array",
+                    "items": {"type": ["string", "null"]}
+                }
             },
             "required": ["year", "university"]
         }

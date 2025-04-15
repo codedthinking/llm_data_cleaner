@@ -27,7 +27,7 @@ class DataCleaner:
         model: str = "gpt-4o-2024-08-06",
         max_retries: int = 3,
         retry_delay: int = 5,
-        batch_size: int = 20,
+        batch_size: int = 100,
         temperature: float = 0.0,
     ):
         """
@@ -154,34 +154,31 @@ class DataCleaner:
         """
         result_batch = batch.copy()
         result_batch[f"cleaned_{column}"] = None
+
+        tuples = list(zip(batch.index, batch[column].fillna("")))
         
-        for idx, row in batch.iterrows():
-            value = row[column]
+        # Process individual value
+        messages = [
+            {"role": "system", "content": f"You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. {prompt} The data is in a list of tuples. The first element of each tuple is the row index, the second element is the value to be cleaned. Respond with valid JSON object with the given keys and a list of cleaned values as the value."},
+            {"role": "user", "content": f"{tuples}"}
+        ]
+
+        cleaned_value = self._call_openai_with_retry(messages, schema)
+        
+        # Normalize keys if schema is provided
+        if schema and "properties" in schema and isinstance(cleaned_value, dict):
+            normalized_value = self._normalize_keys(cleaned_value, schema)
             
-            if pd.isna(value):
-                result_batch.at[idx, f"cleaned_{column}"] = json.dumps({"error": "Original value is NaN"})
-                continue
-            
-            # Process individual value
-            messages = [
-                {"role": "system", "content": "You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. Respond with valid JSON literal (string, number, boolean or null), or JSON array, or JSON object."},
-                {"role": "user", "content": f"{prompt}\n\nData to clean: {value}"}
-            ]
-            
-            cleaned_value = self._call_openai_with_retry(messages, schema)
-            
-            # Normalize keys if schema is provided
-            if schema and "properties" in schema and isinstance(cleaned_value, dict):
-                normalized_value = self._normalize_keys(cleaned_value, schema)
-                
-                # Validate the normalized value
-                try:
-                    validate(instance=normalized_value, schema=schema)
-                    cleaned_value = normalized_value
-                except ValidationError as e:
-                    cleaned_value = {"error": f"Schema validation failed: {str(e)}", "data": cleaned_value}
-            
-            result_batch.at[idx, f"cleaned_{column}"] = json.dumps(cleaned_value)
+            # Validate the normalized value
+            try:
+                validate(instance=normalized_value, schema=schema)
+                cleaned_value = normalized_value
+            except ValidationError as e:
+                cleaned_value = {"error": f"Schema validation failed: {str(e)}", "data": cleaned_value}
+            print(f"Cleaned value: {cleaned_value}")
+
+        for key in cleaned_value.keys():
+            result_batch[f"cleaned_{column}"] = cleaned_value.get(key, None)
         
         return result_batch
         
