@@ -274,17 +274,12 @@ class DataCleaner:
                     model=self.model,
                     messages=messages,
                     temperature=self.temperature,
-                    text=dict(
-                        format=dict(
-                            type="json_schema",
-                            name="value",
-                            schema=schema),
-                        strict=True)
-                )       
+                    response_format={"type": "json_object"}
+                )
                 
                 # Parse the response
                 try:
-                    return json.loads(response.output_text)
+                    return json.loads(response.choices[0].message.content)
                 except json.JSONDecodeError:
                     if attempt < self.max_retries - 1:
                         logger.warning(f"Failed to parse JSON response. Retrying ({attempt + 1}/{self.max_retries})...")
