@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "llm_data_cleaner"
-version = "0.2.3"
+version = "0.2.4"
 description = "A Python package for cleaning data using OpenAI API"
 authors = ["Miklós Koren <koren@codedthinking.com>"]
 readme = "README.md"
@@ -13,6 +13,7 @@ pydantic = "^2.0.0"
 jsonschema = "^4.0.0"
 tqdm = "^4.65.0"
 pandas = "^2.2.3"
+pyyaml = "^6.0.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"

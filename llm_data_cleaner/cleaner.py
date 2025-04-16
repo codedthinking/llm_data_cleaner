@@ -156,10 +156,11 @@ class DataCleaner:
         result_batch[f"cleaned_{column}"] = None
 
         tuples = list(zip(batch.index, batch[column].fillna("")))
+        n_elements = len(tuples)
         
         # Process individual value
         messages = [
-            {"role": "system", "content": f"You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. {prompt} The data is in a list of tuples. The first element of each tuple is the row index, the second element is the value to be cleaned. Respond with valid JSON object with the given keys and a list of cleaned values as the value."},
+            {"role": "system", "content": f"You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. {prompt} The data is in a list of {n_elements} tuples. The first element of each tuple is the row index, the second element is the value to be cleaned. Respond with valid JSON object with the given keys and a list of cleaned values as the value. Each list should have exactly {n_elements} elements. If there is no value, return None, do not skip over the element."},
             {"role": "user", "content": f"{tuples}"}
         ]
 
