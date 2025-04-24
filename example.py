@@ -1,6 +1,24 @@
 import os
 import pandas as pd
 from llm_data_cleaner import DataCleaner
+from pydantic import BaseModel
+from typing import Optional, List
+
+# Define your models
+class EducationItem(BaseModel):
+    index: int
+    year: Optional[List[str]]
+    university: Optional[List[str]]
+
+class EducationBatch(BaseModel):
+    cleaned: List[Optional[EducationItem]]
+
+class JobTitleItem(BaseModel):
+    index: int
+    job_title: Optional[str]
+
+class JobTitleBatch(BaseModel):
+    cleaned: List[Optional[JobTitleItem]]
 
 # Set your OpenAI API key
 api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -24,39 +42,26 @@ data = {
 df = pd.DataFrame(data)
 
 # Define cleaning instructions - schema is optional
-cleaning_instructions = {
+instructions = {
     "education": {
-        "prompt": "The rows below contain education experience of individuals residing in Hungary. Extract the year of higher education degree (may be None) and the precise, non abbreviated name of the university (may be None).",
-        # Optional schema
-        "schema": {
-            "type": "object",
-            "properties": {
-                "year": {
-                    "type": "array",
-                    "items": {"type": ["integer", "null"]}
-                },
-                "university": {
-                    "type": "array",
-                    "items": {"type": ["string", "null"]}
-                }
-            },
-            "required": ["year", "university"]
-        }
+        "description": (
+            "Extract year (if present) and university name (if present) from the education strings. "
+            "Return a list of year (int or None) and university (string or None) values matching input order."
+        ),
+        "model": EducationBatch,
     },
     "job_title": {
-        "prompt": "Standardize the job title according to industry standards. Return the standardized job title."
-        # No schema for this column
-    }
+        "description": (
+            "Standardize each job title string to an industry standard format. Return a list of job_title strings."
+        ),
+        "model": JobTitleBatch,
+    },
 }
-
 # Initialize the cleaner with a batch size (default is 20)
-cleaner = DataCleaner(
-    api_key=api_key,
-    batch_size=20  # Process up to 20 rows in a single API call
-)
+cleaner = DataCleaner(api_key=api_key, batch_size=20)
 
 # Clean the data
-result = cleaner.clean_dataframe(df, cleaning_instructions)
+result = cleaner.clean_dataframe(df,instructions)
 
 # Display results
 print("Original Data:")
