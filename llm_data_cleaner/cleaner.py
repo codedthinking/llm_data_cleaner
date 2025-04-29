@@ -12,6 +12,14 @@ class InstructionField(BaseModel):
     prompt: str
     schema: Type[BaseModel]  # Pydantic model class for the schema
 
+    def __getitem__(self, item):
+        if item == "prompt":
+            return self.prompt
+        elif item == "schema":
+            return self.schema
+        else:
+            raise KeyError(f"Invalid key: {item}")
+
 class InstructionSchema(RootModel):
     root: Dict[str, InstructionField]
 
@@ -20,6 +28,9 @@ class InstructionSchema(RootModel):
 
     def __getitem__(self, item):
         return self.root[item]
+    
+    def items(self):
+        return self.root.items()
 
 
 class DataCleaner:
@@ -231,4 +242,4 @@ def load_yaml_instructions(yaml_path:str = None) -> InstructionSchema:
             else:
                 annotations[field] = (t, ...)
         instructions[name] = dict(prompt=prompt, schema=create_model(name, **annotations, __base__=BaseModel))
-    return instructions
+    return InstructionSchema(root=instructions)
