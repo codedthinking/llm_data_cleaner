@@ -142,3 +142,54 @@ class DataCleaner:
             batch_name,
             cleaned=(List[Optional[model]], ...)
         )
+   
+    @staticmethod
+    def load_yaml_models(yaml_path:str = None) -> Dict[str, Type[BaseModel]]:
+        """
+        Load models from YAML file.
+        """
+        import yaml
+        def parse_type(props, model_defs=None, model_cache=None):
+
+            if model_defs is None:
+                model_defs = {}
+            if model_cache is None:
+                model_cache = {}
+
+            typ = props["type"]
+            optional = props.get("optional", False)
+            if typ == 'str':
+                typ = str
+
+            if typ == 'float':
+                typ = float
+
+            if typ == 'list':
+                items = props["items"]
+                if isinstance(items, dict):
+                    typ = List[parse_type(items, model_defs, model_cache)]
+                else:
+                    typ = List[parse_type({"type": items}, model_defs, model_cache)]
+
+            if optional:
+                typ = Optional[typ]
+
+            return typ
+
+        with open(yaml_path, "r") as f:
+            schema = yaml.safe_load(f)
+        models = {}
+        for name, model_def in schema["models"].items():
+            fields = model_def["fields"]
+            annotations = {}
+            defaults = {}
+            for field, props in fields.items():
+                t = parse_type(props)
+                print(t)
+                if props.get("optional", False):
+                    defaults[field] = None
+                    annotations[field] = (t, None)
+                else:
+                    annotations[field] = (t, ...)
+            models[name] = create_model(name, **annotations, __base__=BaseModel)
+        return models

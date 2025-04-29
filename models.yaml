@@ -1,0 +1,48 @@
+models:
+  Occupation:
+    fields:
+      index:
+        type: int
+      occupation:
+        type: str
+        optional: true
+  Company:
+    fields:
+      index:
+        type: int
+      company:
+        type: str
+        optional: true
+  Education:
+    fields:
+      index:
+        type: int
+      year:
+        type: list
+        items:
+          type: str
+        optional: true
+      institute:
+        type: list
+        items:
+          type: str
+        optional: true
+  Career:
+    fields:
+      index:
+        type: int
+      ccompany:
+        type: list
+        items:
+          type: str
+        optional: true
+      coccupation:
+        type: list
+        items:
+          type: str
+        optional: true
+      cyear:
+        type: list
+        items:
+          type: str
+        optional: true
