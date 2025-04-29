@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from llm_data_cleaner import DataCleaner
+from llm_data_cleaner import DataCleaner, load_yaml_instructions
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -14,9 +14,17 @@ class JobTitleItem(BaseModel):
     index: int
     job_title: Optional[str]
 
-# Set your OpenAI API key
-api_key = os.environ.get("OPENAI_API_KEY", "")
 
+yaml_instructions = load_yaml_instructions("instructions.yaml")
+print(yaml_instructions)
+#raise ValueError("Instructions loaded from YAML file.")
+
+# Set your OpenAI API key, reading from .secrets/OPENAI_API_KEY
+with open(".secrets/OPENAI_API_KEY", "r") as f:
+    api_key = f.read().strip()
+# Ensure the API key is set
+if not api_key:
+    raise ValueError("API key is not set. Please provide a valid OpenAI API key.")
 # Create a sample DataFrame
 data = {
     "education": [
@@ -55,13 +63,13 @@ instructions = {
 cleaner = DataCleaner(api_key=api_key, batch_size=20)
 
 # Clean the data
-result = cleaner.clean_dataframe(df,instructions)
+result2 = cleaner.clean_dataframe(df, yaml_instructions)
 
 # Display results
 print("Original Data:")
 print(df)
 print("\nCleaned Data:")
-print(result)
+print(result2)
 
 # You can also save the results to a CSV file
-result.to_csv("cleaned_data.csv", index=False)
+result2.to_csv("cleaned_data.csv", index=False)

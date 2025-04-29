@@ -159,3 +159,69 @@ class DataCleaner:
             batch_name,
             cleaned=(List[Optional[model]], ...)
         )
+
+def load_yaml_instructions(yaml_path:str = None) -> InstructionSchema:
+    """
+    Load models from YAML file.
+    """
+    import yaml
+
+    type_names = dict(
+        str=str,
+        int=int,
+        float=float,
+        bool=bool,
+        list=list,
+        dict=dict,
+        object=dict,
+        array=list,
+        integer=int,
+        number=float,
+        string=str,
+        null=None,
+        any=Any,)
+
+    def parse_type(props):
+        typ = props["type"]
+        optional = props.get("optional", False)
+
+        if isinstance(typ, str) and typ in type_names:
+            typ = type_names[typ]
+
+        if typ == list:
+            items = props["items"]
+            if isinstance(items, dict):
+                typ = List[parse_type(items)]
+            else:
+                typ = List[parse_type({"type": items})]
+
+        if optional:
+            typ = Optional[typ]
+
+        return typ
+
+    with open(yaml_path, "r") as f:
+        schema = yaml.safe_load(f)
+
+    instructions = {}
+
+    for name, instruction in schema.items():
+        prompt = instruction["prompt"]
+        model_def = instruction.get("schema", {})
+
+        # schema is a dictonary with its "type" key having value "object". we also need a "properties" key
+        if not ("properties" in model_def and "type" in model_def and model_def["type"] == "object"):
+            raise ValueError(f"Schema for {name} must be a dictionary with 'type' as 'object' and 'properties' key") 
+        
+        fields = model_def["properties"]
+        annotations = {}
+        defaults = {}
+        for field, props in fields.items():
+            t = parse_type(props)
+            if props.get("optional", False):
+                defaults[field] = None
+                annotations[field] = (t, None)
+            else:
+                annotations[field] = (t, ...)
+        instructions[name] = dict(prompt=prompt, schema=create_model(name, **annotations, __base__=BaseModel))
+    return instructions

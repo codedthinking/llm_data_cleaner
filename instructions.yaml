@@ -1,47 +1,26 @@
-Occupation:
-  fields:
-    index:
-      type: int
-    occupation:
-      type: str
-      optional: true
-Company:
-  fields:
-    index:
-      type: int
-    company:
-      type: str
-      optional: true
-Education:
-  fields:
-    index:
-      type: int
-    year:
-      type: list
-      items:
-        type: str
-      optional: true
-    institute:
-      type: list
-      items:
-        type: str
-      optional: true
-Career:
-  fields:
-    index:
-      type: int
-    ccompany:
-      type: list
-      items:
-        type: str
-      optional: true
-    coccupation:
-      type: list
-      items:
-        type: str
-      optional: true
-    cyear:
-      type: list
-      items:
-        type: str
-      optional: true
+education:
+  prompt: "Extract year (if present) and university name (if present) from the education strings. Return a list of year (int or None) and university (string or None) values matching input order."
+  schema:
+    type: "object"
+    title: "EducationItem"
+    properties:
+      index:
+        type: "integer"
+      year:
+        type: "array"
+        items:
+          type: "string"
+      university:
+        type: "array"
+        items:
+          type: "string"
+job_title:
+  prompt: "Standardize each job title string to an industry standard format. Return a list of job_title strings."
+  schema:
+    type: "object"
+    title: "JobTitleItem"
+    properties:
+      index:
+        type: "integer"
+      job_title:
+        type: "string"
