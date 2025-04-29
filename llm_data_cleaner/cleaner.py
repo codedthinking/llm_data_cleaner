@@ -34,6 +34,7 @@ class DataCleaner:
         max_retries: int = 3,
         retry_delay: int = 5,
         batch_size: int = 10,
+        system_prompt: str = None,
     ):
         self.client = OpenAI(api_key=api_key)
         self.model = model
@@ -42,14 +43,20 @@ class DataCleaner:
         self.batch_size = batch_size
 
         # General system prompt format, set once for all tasks (you may tweak further)
-        self.system_prompt_template = (
-            "You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. "
-            "{task_description}."
-            "The first element of each tuple is the row index, the second element is the value to be cleaned. "
-            "Respond with a JSON list of objects, one per tuple, each including the input row's index and the extracted"
-            "fields (index, year, university, etc.). If extraction fails, output null or set the fields to null, but always"
-                "preserve the input order and list length."
-        )
+        if system_prompt:
+            # check that "{column_prompt}" is present in the prompt
+            if "{column_prompt}" not in system_prompt:
+                raise ValueError("System prompt must contain '{column_prompt}' placeholder to load column-specific instructions.")
+            self.system_prompt_template = system_prompt
+        else:        
+            self.system_prompt_template = (
+                "You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. "
+                "{column_prompt}."
+                "The first element of each tuple is the row index, the second element is the value to be cleaned. "
+                "Respond with a JSON list of objects, one per tuple, each including the input row's index and the extracted"
+                "fields (index, year, university, etc.). If extraction fails, output null or set the fields to null, but always"
+                    "preserve the input order and list length."
+            )
 
     def clean_dataframe(
         self,
@@ -104,7 +111,7 @@ class DataCleaner:
         system_msg = {
             "role": "system",
             "content": self.system_prompt_template.format(
-                task_description=task_description, n_elements=n_elements
+                column_prompt=task_description, n_elements=n_elements
             ),
         }
         user_msg = {
