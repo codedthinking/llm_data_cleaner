@@ -1,8 +1,8 @@
 import os
 import pandas as pd
-from typing import Dict, Any, Type
+from typing import Dict, Any, Type, List, Optional
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 import time
 from tqdm import tqdm
 
@@ -52,7 +52,7 @@ class DataCleaner:
                 continue
 
             task_description = instruction["description"]
-            pyd_model_batch: Type[BaseModel] = instruction["model"]
+            pyd_model_batch: Type[BaseModel] = self._make_batch_model(instruction["model"])
             cleaned_batches = []
 
             print(f"Cleaning column '{column}' in batches...")
@@ -107,7 +107,12 @@ class DataCleaner:
             index = item.index
             for fname in item.model_fields:
                 if fname != "index":
-                    result_batch.at[index, f"cleaned_{fname}"] = getattr(item, fname)
+                    colname = f"cleaned_{fname}"
+                    if colname not in result_batch.columns:
+                        result_batch[colname] = None
+                    value = getattr(item, fname, None)
+                    if index in result_batch.index:
+                        result_batch.at[index, colname] = value
 
         return result_batch
 
@@ -129,3 +134,11 @@ class DataCleaner:
                 time.sleep(self.retry_delay)
         print("Failed batch cleaning after retries.")
         return None
+
+    def _make_batch_model(self, model: Type[BaseModel], batch_name: str = None) -> Type[BaseModel]:
+        if batch_name is None:
+            batch_name = f"Batch{model.__name__}"
+        return create_model(
+            batch_name,
+            cleaned=(List[Optional[model]], ...)
+        )
