@@ -42,7 +42,7 @@ class DataCleaner:
     ) -> pd.DataFrame:
         """
         Cleans each column specified in instructions, in batches.
-        instructions: dict of {column: {"prompt": "...", "schema": BatchPydanticModel}}
+        instructions: dict of {column: {"prompt": "...", "schema": pydantic.BaseModel}}
         Returns a DataFrame with cleaned columns appended with 'cleaned_{column}_' prefix.
         """
         result_df = pd.DataFrame()
