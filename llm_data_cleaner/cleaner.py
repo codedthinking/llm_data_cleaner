@@ -83,7 +83,6 @@ class DataCleaner:
         result_batch = batch.copy()
         tuples = list(zip(batch.index, batch[column].fillna("")))
         n_elements = len(tuples)
-
         system_msg = {
             "role": "system",
             "content": self.system_prompt_template.format(
