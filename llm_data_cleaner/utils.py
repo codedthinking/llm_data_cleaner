@@ -1,7 +1,7 @@
 from typing import List
 
 import pandas as pd
-
+from pydantic import BaseModel
 
 def batch_dataframe(df: pd.DataFrame, batch_size: int) -> List[pd.DataFrame]:
     """
@@ -50,3 +50,12 @@ def validate_instructions(instructions: dict) -> List[str]:
             errors.append(f"Schema for column '{column}' must be a dictionary")
     
     return errors
+
+
+class Example(BaseModel):
+    """
+    Example class for structured output testing.
+    """
+    year: List[int] = None
+    university: List[str] = None
+    job_title: str = None
