@@ -42,7 +42,7 @@ class DataCleaner:
     ) -> pd.DataFrame:
         """
         Cleans each column specified in instructions, in batches.
-        instructions: dict of {column: {"description":..., "model":BatchPydanticModel}}
+        instructions: dict of {column: {"prompt": "...", "schema": BatchPydanticModel}}
         Returns a DataFrame with cleaned columns appended with 'cleaned_{column}_' prefix.
         """
         result_df = pd.DataFrame()
@@ -51,8 +51,10 @@ class DataCleaner:
                 print(f"Column '{column}' not found in DataFrame, skipping.")
                 continue
 
-            task_description = instruction["description"]
-            pyd_model_batch: Type[BaseModel] = self._make_batch_model(instruction["model"])
+            task_description = instruction["prompt"]
+            pyd_model_batch: Type[BaseModel] = self._make_batch_model(instruction["schema"])
+            if not issubclass(pyd_model_batch, BaseModel):
+                raise ValueError(f"Invalid schema for column '{column}'. Must be a Pydantic model.")
             cleaned_batches = []
 
             print(f"Cleaning column '{column}' in batches...")
@@ -178,7 +180,7 @@ class DataCleaner:
         with open(yaml_path, "r") as f:
             schema = yaml.safe_load(f)
         models = {}
-        for name, model_def in schema["models"].items():
+        for name, model_def in schema.items():
             fields = model_def["fields"]
             annotations = {}
             defaults = {}

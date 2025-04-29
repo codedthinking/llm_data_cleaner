@@ -38,17 +38,17 @@ df = pd.DataFrame(data)
 # Define cleaning instructions - schema is optional
 instructions = {
     "education": {
-        "description": (
+        "prompt": (
             "Extract year (if present) and university name (if present) from the education strings. "
             "Return a list of year (int or None) and university (string or None) values matching input order."
         ),
-        "model": EducationBatch,
+        "schema": EducationItem,
     },
     "job_title": {
-        "description": (
+        "prompt": (
             "Standardize each job title string to an industry standard format. Return a list of job_title strings."
         ),
-        "model": JobTitleBatch,
+        "schema": JobTitleItem,
     },
 }
 # Initialize the cleaner with a batch size (default is 20)
