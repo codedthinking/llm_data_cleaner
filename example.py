@@ -10,15 +10,9 @@ class EducationItem(BaseModel):
     year: Optional[List[str]]
     university: Optional[List[str]]
 
-class EducationBatch(BaseModel):
-    cleaned: List[Optional[EducationItem]]
-
 class JobTitleItem(BaseModel):
     index: int
     job_title: Optional[str]
-
-class JobTitleBatch(BaseModel):
-    cleaned: List[Optional[JobTitleItem]]
 
 # Set your OpenAI API key
 api_key = os.environ.get("OPENAI_API_KEY", "")
