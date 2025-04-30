@@ -1,0 +1,26 @@
+education:
+  prompt: "Extract year (if present) and university name (if present) from the education strings. Return a list of year (int or None) and university (string or None) values matching input order."
+  schema:
+    type: "object"
+    title: "EducationItem"
+    properties:
+      index:
+        type: "integer"
+      year:
+        type: "array"
+        items:
+          type: "string"
+      university:
+        type: "array"
+        items:
+          type: "string"
+job_title:
+  prompt: "Standardize each job title string to an industry standard format. Return a list of job_title strings."
+  schema:
+    type: "object"
+    title: "JobTitleItem"
+    properties:
+      index:
+        type: "integer"
+      job_title:
+        type: "string"

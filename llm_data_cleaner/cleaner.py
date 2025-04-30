@@ -2,9 +2,36 @@ import os
 import pandas as pd
 from typing import Dict, Any, Type, List, Optional
 from openai import OpenAI
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, RootModel, create_model
 import time
 from tqdm import tqdm
+
+# schema for instructions as a pydantic model
+# instructions is a dictionary, with keys as column names and values as dictionaries of "prompt" (a string) amd "schema" (a pydantic model)
+class InstructionField(BaseModel):
+    prompt: str
+    schema: Type[BaseModel]  # Pydantic model class for the schema
+
+    def __getitem__(self, item):
+        if item == "prompt":
+            return self.prompt
+        elif item == "schema":
+            return self.schema
+        else:
+            raise KeyError(f"Invalid key: {item}")
+
+class InstructionSchema(RootModel):
+    root: Dict[str, InstructionField]
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+    
+    def items(self):
+        return self.root.items()
+
 
 class DataCleaner:
     """
@@ -18,6 +45,7 @@ class DataCleaner:
         max_retries: int = 3,
         retry_delay: int = 5,
         batch_size: int = 10,
+        system_prompt: str = None,
     ):
         self.client = OpenAI(api_key=api_key)
         self.model = model
@@ -26,23 +54,29 @@ class DataCleaner:
         self.batch_size = batch_size
 
         # General system prompt format, set once for all tasks (you may tweak further)
-        self.system_prompt_template = (
-            "You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. "
-            "{task_description}."
-            "The first element of each tuple is the row index, the second element is the value to be cleaned. "
-            "Respond with a JSON list of objects, one per tuple, each including the input row's index and the extracted"
-            "fields (index, year, university, etc.). If extraction fails, output null or set the fields to null, but always"
-                "preserve the input order and list length."
-        )
+        if system_prompt:
+            # check that "{column_prompt}" is present in the prompt
+            if "{column_prompt}" not in system_prompt:
+                raise ValueError("System prompt must contain '{column_prompt}' placeholder to load column-specific instructions.")
+            self.system_prompt_template = system_prompt
+        else:        
+            self.system_prompt_template = (
+                "You are a data cleaning assistant. Your task is to clean and structure data according to the instructions. "
+                "{column_prompt}."
+                "The first element of each tuple is the row index, the second element is the value to be cleaned. "
+                "Respond with a JSON list of objects, one per tuple, each including the input row's index and the extracted"
+                "fields (index, year, university, etc.). If extraction fails, output null or set the fields to null, but always"
+                    "preserve the input order and list length."
+            )
 
     def clean_dataframe(
         self,
         df: pd.DataFrame,
-        instructions: Dict[str, Dict[str, Any]],
+        instructions: InstructionSchema,
     ) -> pd.DataFrame:
         """
         Cleans each column specified in instructions, in batches.
-        instructions: dict of {column: {"description":..., "model":BatchPydanticModel}}
+        instructions: dict of {column: {"prompt": "...", "schema": pydantic.BaseModel}}
         Returns a DataFrame with cleaned columns appended with 'cleaned_{column}_' prefix.
         """
         result_df = pd.DataFrame()
@@ -51,8 +85,10 @@ class DataCleaner:
                 print(f"Column '{column}' not found in DataFrame, skipping.")
                 continue
 
-            task_description = instruction["description"]
-            pyd_model_batch: Type[BaseModel] = self._make_batch_model(instruction["model"])
+            task_description = instruction["prompt"]
+            pyd_model_batch: Type[BaseModel] = self._make_batch_model(instruction["schema"])
+            if not issubclass(pyd_model_batch, BaseModel):
+                raise ValueError(f"Invalid schema for column '{column}'. Must be a Pydantic model.")
             cleaned_batches = []
 
             print(f"Cleaning column '{column}' in batches...")
@@ -86,7 +122,7 @@ class DataCleaner:
         system_msg = {
             "role": "system",
             "content": self.system_prompt_template.format(
-                task_description=task_description, n_elements=n_elements
+                column_prompt=task_description, n_elements=n_elements
             ),
         }
         user_msg = {
@@ -141,54 +177,69 @@ class DataCleaner:
             batch_name,
             cleaned=(List[Optional[model]], ...)
         )
-   
-    @staticmethod
-    def load_yaml_models(yaml_path:str = None) -> Dict[str, Type[BaseModel]]:
-        """
-        Load models from YAML file.
-        """
-        import yaml
-        def parse_type(props, model_defs=None, model_cache=None):
 
-            if model_defs is None:
-                model_defs = {}
-            if model_cache is None:
-                model_cache = {}
+def load_yaml_instructions(yaml_path:str = None) -> InstructionSchema:
+    """
+    Load models from YAML file.
+    """
+    import yaml
 
-            typ = props["type"]
-            optional = props.get("optional", False)
-            if typ == 'str':
-                typ = str
+    type_names = dict(
+        str=str,
+        int=int,
+        float=float,
+        bool=bool,
+        list=list,
+        dict=dict,
+        object=dict,
+        array=list,
+        integer=int,
+        number=float,
+        string=str,
+        null=None,
+        any=Any,)
 
-            if typ == 'float':
-                typ = float
+    def parse_type(props):
+        typ = props["type"]
+        optional = props.get("optional", False)
 
-            if typ == 'list':
-                items = props["items"]
-                if isinstance(items, dict):
-                    typ = List[parse_type(items, model_defs, model_cache)]
-                else:
-                    typ = List[parse_type({"type": items}, model_defs, model_cache)]
+        if isinstance(typ, str) and typ in type_names:
+            typ = type_names[typ]
 
-            if optional:
-                typ = Optional[typ]
+        if typ == list:
+            items = props["items"]
+            if isinstance(items, dict):
+                typ = List[parse_type(items)]
+            else:
+                typ = List[parse_type({"type": items})]
 
-            return typ
+        if optional:
+            typ = Optional[typ]
 
-        with open(yaml_path, "r") as f:
-            schema = yaml.safe_load(f)
-        models = {}
-        for name, model_def in schema["models"].items():
-            fields = model_def["fields"]
-            annotations = {}
-            defaults = {}
-            for field, props in fields.items():
-                t = parse_type(props)
-                print(t)
-                if props.get("optional", False):
-                    defaults[field] = None
-                    annotations[field] = (t, None)
-                else:
-                    annotations[field] = (t, ...)
-            models[name] = create_model(name, **annotations, __base__=BaseModel)
-        return models
+        return typ
+
+    with open(yaml_path, "r") as f:
+        schema = yaml.safe_load(f)
+
+    instructions = {}
+
+    for name, instruction in schema.items():
+        prompt = instruction["prompt"]
+        model_def = instruction.get("schema", {})
+
+        # schema is a dictonary with its "type" key having value "object". we also need a "properties" key
+        if not ("properties" in model_def and "type" in model_def and model_def["type"] == "object"):
+            raise ValueError(f"Schema for {name} must be a dictionary with 'type' as 'object' and 'properties' key") 
+        
+        fields = model_def["properties"]
+        annotations = {}
+        defaults = {}
+        for field, props in fields.items():
+            t = parse_type(props)
+            if props.get("optional", False):
+                defaults[field] = None
+                annotations[field] = (t, None)
+            else:
+                annotations[field] = (t, ...)
+        instructions[name] = dict(prompt=prompt, schema=create_model(name, **annotations, __base__=BaseModel))
+    return InstructionSchema(root=instructions)
