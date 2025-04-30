@@ -2,35 +2,10 @@ import os
 import pandas as pd
 from typing import Dict, Any, Type, List, Optional
 from openai import OpenAI
-from pydantic import BaseModel, RootModel, create_model
+from pydantic import BaseModel, create_model
+from llm_data_cleaner.utils import InstructionField, InstructionSchema
 import time
 from tqdm import tqdm
-
-# schema for instructions as a pydantic model
-# instructions is a dictionary, with keys as column names and values as dictionaries of "prompt" (a string) amd "schema" (a pydantic model)
-class InstructionField(BaseModel):
-    prompt: str
-    schema: Type[BaseModel]  # Pydantic model class for the schema
-
-    def __getitem__(self, item):
-        if item == "prompt":
-            return self.prompt
-        elif item == "schema":
-            return self.schema
-        else:
-            raise KeyError(f"Invalid key: {item}")
-
-class InstructionSchema(RootModel):
-    root: Dict[str, InstructionField]
-
-    def __iter__(self):
-        return iter(self.root)
-
-    def __getitem__(self, item):
-        return self.root[item]
-    
-    def items(self):
-        return self.root.items()
 
 
 class DataCleaner:
@@ -77,7 +52,7 @@ class DataCleaner:
         """
         Cleans each column specified in instructions, in batches.
         instructions: dict of {column: {"prompt": "...", "schema": pydantic.BaseModel}}
-        Returns a DataFrame with cleaned columns appended with 'cleaned_{column}_' prefix.
+        Returns a DataFrame with cleaned columns appended with 'cleaned_{column}' prefix.
         """
         result_df = pd.DataFrame()
         for column, instruction in instructions.items():
@@ -123,8 +98,8 @@ class DataCleaner:
             "role": "system",
             "content": self.system_prompt_template.format(
                 column_prompt=task_description, n_elements=n_elements
-            ),
-        }
+                )
+            }
         user_msg = {
             "role": "user",
             "content": str(tuples)
@@ -177,7 +152,7 @@ class DataCleaner:
             batch_name,
             cleaned=(List[Optional[model]], ...)
         )
-
+    
 def load_yaml_instructions(yaml_path:str = None) -> InstructionSchema:
     """
     Load models from YAML file.
