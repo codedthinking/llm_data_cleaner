@@ -6,14 +6,15 @@ education:
     properties:
       index:
         type: "integer"
-      year:
+      education:
         type: "array"
         items:
-          type: "string"
-      university:
-        type: "array"
-        items:
-          type: "string"
+          type: "object"
+          properties:
+            year:
+              type: "string"
+            university:
+              type: "string"
 job_title:
   prompt: "Standardize each job title string to an industry standard format. Return a list of job_title strings."
   schema:

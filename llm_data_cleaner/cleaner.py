@@ -2,10 +2,11 @@ import os
 import pandas as pd
 from typing import Dict, Any, Type, List, Optional
 from openai import OpenAI
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, create_model, ConfigDict
 from llm_data_cleaner.utils import InstructionField, InstructionSchema
 import time
 from tqdm import tqdm
+from .utils import jsonize
 
 
 class DataCleaner:
@@ -121,6 +122,8 @@ class DataCleaner:
                     if colname not in result_batch.columns:
                         result_batch[colname] = None
                     value = getattr(item, fname, None)
+                    # if value is a BaseModel, convert to JSON string
+                    value = jsonize(value)
                     if index in result_batch.index:
                         result_batch.at[index, colname] = value
 
@@ -188,6 +191,22 @@ def load_yaml_instructions(yaml_path:str = None) -> InstructionSchema:
             else:
                 typ = List[parse_type({"type": items})]
 
+        if typ == dict:
+            # generate BaseModel on the fly
+            properties = props.get("properties", {})
+            annotations = {}
+            for field, field_props in properties.items():
+                annotations[field] = parse_type(field_props)
+
+            # fix error:     raise PydanticUserError(pydantic.errors.PydanticUserError: A non-annotated attribute was detected: `year = <class 'str'>`. All model fields require a type annotation; if `year` is not meant to be a field, you may be able to resolve this error by annotating it as a `ClassVar` or updating `model_config['ignored_types']`.
+            # to avoid this, we need to use create_model with annotations
+            # and not BaseModel
+            annotations = {k: (v, ...) for k, v in annotations.items()}
+            annotations["__config__"] = ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})
+
+            # create a new model with the properties
+            typ = create_model("DynamicModel", **annotations)
+
         if optional:
             typ = Optional[typ]
 
@@ -216,5 +235,5 @@ def load_yaml_instructions(yaml_path:str = None) -> InstructionSchema:
                 annotations[field] = (t, None)
             else:
                 annotations[field] = (t, ...)
-        instructions[name] = dict(prompt=prompt, schema=create_model(name, **annotations, __base__=BaseModel, __config__=type('Config', (), {'extra': 'forbid'})))
+        instructions[name] = dict(prompt=prompt, schema=create_model(name, **annotations, __config__=ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})))
     return InstructionSchema(root=instructions)

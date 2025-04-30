@@ -1,6 +1,30 @@
 from typing import Dict, Any, Type, List, Optional
 import pandas as pd
 from pydantic import BaseModel, RootModel
+import json
+
+def jsonize(data: Any) -> str:
+    """
+    Convert data to JSON string. Data may be a literal, a list of literals, a BaseModel, or a list of BaseModels. 
+    Dictionaries are not permitted.
+    Use proper JSON parsing, do not manually convert.
+
+    Args:
+        data: Data to be converted
+
+    Returns:
+        JSON string representation of the data
+    """
+    if isinstance(data, list):
+        # Check if all elements are BaseModel instances
+        if all(isinstance(item, BaseModel) for item in data):
+            return json.dumps([item.dict() for item in data], ensure_ascii=False)
+        else:
+            return json.dumps(data, ensure_ascii=False)
+    elif isinstance(data, BaseModel):
+        return data.json()
+    else:
+        return data
 
 # schema for instructions as a pydantic model
 # instructions is a dictionary, with keys as column names and values as dictionaries of "prompt" (a string) amd "schema" (a pydantic model)

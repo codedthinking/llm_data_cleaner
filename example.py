@@ -4,9 +4,20 @@ from llm_data_cleaner import DataCleaner, load_yaml_instructions
 from pydantic import BaseModel
 from typing import Optional, List
 
+# Define your models
+class EducationSpell(BaseModel):
+    year: Optional[str]
+    university: Optional[str]
+
+class EducationItem(BaseModel):
+    index: int
+    education: Optional[List[EducationSpell]]
+
+class JobTitleItem(BaseModel):
+    index: int
+    job_title: Optional[str]
 
 yaml_instructions = load_yaml_instructions("instructions.yaml")
-file_path = "feor08_kozl_melleklet.pdf"
 
 # Set your OpenAI API key, reading from .secrets/OPENAI_API_KEY
 with open(".secrets/OPENAI_API_KEY", "r") as f:
@@ -32,6 +43,23 @@ data = {
 
 df = pd.DataFrame(data)
 
+
+# Define cleaning instructions - schema is optional
+instructions = {
+    "education": {
+        "prompt": (
+            "Extract year (if present) and university name (if present) from the education strings. "
+            "Return a list of objects with properties year (int or None) and university (string or None) values matching input order."
+        ),
+        "schema": EducationItem,
+    },
+    "job_title": {
+        "prompt": (
+            "Standardize each job title string to an industry standard format. Return a list of job_title strings."
+        ),
+        "schema": JobTitleItem,
+    },
+}
 # Initialize the cleaner with a batch size (default is 20)
 cleaner = DataCleaner(
     api_key=api_key, 
@@ -41,7 +69,9 @@ cleaner = DataCleaner(
 )
 
 # Clean the data
-result = cleaner.clean_dataframe(df, yaml_instructions)
+
+result = cleaner.clean_dataframe(df, instructions)
+#result = cleaner.clean_dataframe(df, yaml_instructions)
 
 # Display results
 print("Original Data:")
