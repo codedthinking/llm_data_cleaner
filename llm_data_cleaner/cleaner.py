@@ -5,6 +5,7 @@ from openai import OpenAI
 from pydantic import BaseModel, RootModel, create_model, ConfigDict
 import time
 from tqdm import tqdm
+from .utils import jsonize
 
 # schema for instructions as a pydantic model
 # instructions is a dictionary, with keys as column names and values as dictionaries of "prompt" (a string) amd "schema" (a pydantic model)
@@ -146,6 +147,8 @@ class DataCleaner:
                     if colname not in result_batch.columns:
                         result_batch[colname] = None
                     value = getattr(item, fname, None)
+                    # if value is a BaseModel, convert to JSON string
+                    value = jsonize(value)
                     if index in result_batch.index:
                         result_batch.at[index, colname] = value
 
@@ -212,6 +215,14 @@ def load_yaml_instructions(yaml_path:str = None) -> InstructionSchema:
                 typ = List[parse_type(items)]
             else:
                 typ = List[parse_type({"type": items})]
+
+        if typ == dict:
+            # generate BaseModel on the fly
+            properties = props.get("properties", {})
+            annotations = {}
+            for field, field_props in properties.items():
+                annotations[field] = parse_type(field_props)
+            typ = create_model("DynamicModel", **annotations)
 
         if optional:
             typ = Optional[typ]
