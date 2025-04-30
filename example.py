@@ -65,7 +65,6 @@ cleaner = DataCleaner(
     api_key=api_key, 
     batch_size=20, 
     system_prompt='Follow these instructions, but return the answers in Greek. {column_prompt}.',
-    file=file_path
 )
 
 # Clean the data
