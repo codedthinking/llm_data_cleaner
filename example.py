@@ -5,10 +5,12 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 # Define your models
+class EducationSpell(BaseModel):
+    year: Optional[str]
+    university: Optional[str]
 class EducationItem(BaseModel):
     index: int
-    year: Optional[List[str]]
-    university: Optional[List[str]]
+    education: Optional[EducationSpell]
 
 class JobTitleItem(BaseModel):
     index: int
@@ -48,7 +50,7 @@ instructions = {
     "education": {
         "prompt": (
             "Extract year (if present) and university name (if present) from the education strings. "
-            "Return a list of year (int or None) and university (string or None) values matching input order."
+            "Return a list of objects with properties year (int or None) and university (string or None) values matching input order."
         ),
         "schema": EducationItem,
     },
@@ -63,13 +65,14 @@ instructions = {
 cleaner = DataCleaner(api_key=api_key, batch_size=20, system_prompt='Follow these instructions, but return the answers in Greek. {column_prompt}.')
 
 # Clean the data
-result2 = cleaner.clean_dataframe(df, yaml_instructions)
+result1 = cleaner.clean_dataframe(df, instructions)
+#result2 = cleaner.clean_dataframe(df, yaml_instructions)
 
 # Display results
 print("Original Data:")
 print(df)
 print("\nCleaned Data:")
-print(result2)
+print(result1)
 
 # You can also save the results to a CSV file
-result2.to_csv("cleaned_data.csv", index=False)
+result1.to_csv("cleaned_data.csv", index=False)
