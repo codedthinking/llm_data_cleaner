@@ -8,9 +8,10 @@ from typing import Optional, List
 class EducationSpell(BaseModel):
     year: Optional[str]
     university: Optional[str]
+
 class EducationItem(BaseModel):
     index: int
-    education: Optional[EducationSpell]
+    education: Optional[List[EducationSpell]]
 
 class JobTitleItem(BaseModel):
     index: int
