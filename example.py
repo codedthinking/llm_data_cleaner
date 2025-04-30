@@ -17,10 +17,7 @@ class JobTitleItem(BaseModel):
     index: int
     job_title: Optional[str]
 
-
 yaml_instructions = load_yaml_instructions("instructions.yaml")
-print(yaml_instructions)
-#raise ValueError("Instructions loaded from YAML file.")
 
 # Set your OpenAI API key, reading from .secrets/OPENAI_API_KEY
 with open(".secrets/OPENAI_API_KEY", "r") as f:
@@ -46,6 +43,7 @@ data = {
 
 df = pd.DataFrame(data)
 
+
 # Define cleaning instructions - schema is optional
 instructions = {
     "education": {
@@ -63,11 +61,17 @@ instructions = {
     },
 }
 # Initialize the cleaner with a batch size (default is 20)
-cleaner = DataCleaner(api_key=api_key, batch_size=20, system_prompt='Follow these instructions, but return the answers in Greek. {column_prompt}.')
+cleaner = DataCleaner(
+    api_key=api_key, 
+    batch_size=20, 
+    system_prompt='Follow these instructions, but return the answers in Greek. {column_prompt}.',
+    file=file_path
+)
 
 # Clean the data
-#result = cleaner.clean_dataframe(df, instructions)
-result = cleaner.clean_dataframe(df, yaml_instructions)
+
+result = cleaner.clean_dataframe(df, instructions)
+#result = cleaner.clean_dataframe(df, yaml_instructions)
 
 # Display results
 print("Original Data:")
