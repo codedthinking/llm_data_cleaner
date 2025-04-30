@@ -66,14 +66,14 @@ instructions = {
 cleaner = DataCleaner(api_key=api_key, batch_size=20, system_prompt='Follow these instructions, but return the answers in Greek. {column_prompt}.')
 
 # Clean the data
-result1 = cleaner.clean_dataframe(df, instructions)
-#result2 = cleaner.clean_dataframe(df, yaml_instructions)
+#result = cleaner.clean_dataframe(df, instructions)
+result = cleaner.clean_dataframe(df, yaml_instructions)
 
 # Display results
 print("Original Data:")
 print(df)
 print("\nCleaned Data:")
-print(result1)
+print(result)
 
 # You can also save the results to a CSV file
-result1.to_csv("cleaned_data.csv", index=False)
+result.to_csv("cleaned_data.csv", index=False)

@@ -222,6 +222,14 @@ def load_yaml_instructions(yaml_path:str = None) -> InstructionSchema:
             annotations = {}
             for field, field_props in properties.items():
                 annotations[field] = parse_type(field_props)
+
+            # fix error:     raise PydanticUserError(pydantic.errors.PydanticUserError: A non-annotated attribute was detected: `year = <class 'str'>`. All model fields require a type annotation; if `year` is not meant to be a field, you may be able to resolve this error by annotating it as a `ClassVar` or updating `model_config['ignored_types']`.
+            # to avoid this, we need to use create_model with annotations
+            # and not BaseModel
+            annotations = {k: (v, ...) for k, v in annotations.items()}
+            annotations["__config__"] = ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})
+
+            # create a new model with the properties
             typ = create_model("DynamicModel", **annotations)
 
         if optional:

@@ -1,5 +1,5 @@
 education,cleaned_education,job_title,cleaned_job_title
 "BS from Technical University of Budapest, 2005","[{""year"": ""2005"", ""university"": ""Technical University of Budapest""}]",sw engineer,Μηχανικός Λογισμικού
 "Master's degree from Eotvos Lorand University in Budapest (ELTE), 2018","[{""year"": ""2018"", ""university"": ""Eotvos Lorand University""}]",Senior Software Architect,Ανώτερος Αρχιτέκτονας Λογισμικού
-No higher education,"[{""year"": null, ""university"": null}]",Jr. Data Scientist,Νεαρός Επιστήμονας Δεδομένων
+No higher education,"[{""year"": """", ""university"": """"}]",Jr. Data Scientist,Νέος Επιστήμονας Δεδομένων
 "PhD in Computer Science, CEU, 2010","[{""year"": ""2010"", ""university"": ""CEU""}]",Chief Technology Officer,Διευθυντής Τεχνολογίας
