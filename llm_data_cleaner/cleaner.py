@@ -241,5 +241,5 @@ def load_yaml_instructions(yaml_path:str = None) -> InstructionSchema:
                 annotations[field] = (t, None)
             else:
                 annotations[field] = (t, ...)
-        instructions[name] = dict(prompt=prompt, schema=create_model(name, **annotations, __base__=BaseModel))
+        instructions[name] = dict(prompt=prompt, schema=create_model(name, **annotations, __base__=BaseModel, __config__=type('Config', (), {'extra': 'forbid'})))
     return InstructionSchema(root=instructions)
