@@ -1,60 +1,29 @@
 from typing import Dict, Any, Type, List, Optional
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, RootModel
 
-def batch_dataframe(df: pd.DataFrame, batch_size: int) -> List[pd.DataFrame]:
-    """
-    Split a DataFrame into batches.
+# schema for instructions as a pydantic model
+# instructions is a dictionary, with keys as column names and values as dictionaries of "prompt" (a string) amd "schema" (a pydantic model)
+class InstructionField(BaseModel):
+    prompt: str
+    schema_class: Type[BaseModel]  # Pydantic model class for the schema
 
-    Args:
-        df: Input DataFrame
-        batch_size: Size of each batch
+    def __getitem__(self, item):
+        if item == "prompt":
+            return self.prompt
+        elif item == "schema":
+            return self.schema_class
+        else:
+            raise KeyError(f"Invalid key: {item}")
 
-    Returns:
-        List of DataFrame batches
-    """
-    if len(df) <= batch_size:
-        return [df]
+class InstructionSchema(RootModel):
+    root: Dict[str, InstructionField]
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
     
-    return [df[i:i + batch_size] for i in range(0, len(df), batch_size)]
-
-
-def validate_instructions(instructions: dict) -> List[str]:
-    """
-    Validate the cleaning instructions.
-
-    Args:
-        instructions: Dictionary of cleaning instructions
-
-    Returns:
-        List of validation errors, empty if valid
-    """
-    errors = []
-    
-    for column, instruction in instructions.items():
-        if not isinstance(column, str):
-            errors.append(f"Column name must be a string, got {type(column)}")
-        
-        if not isinstance(instruction, dict):
-            errors.append(f"Instruction for column '{column}' must be a dictionary")
-            continue
-        
-        if "prompt" not in instruction:
-            errors.append(f"Missing 'prompt' in instructions for column '{column}'")
-        
-        if not isinstance(instruction.get("prompt", ""), str):
-            errors.append(f"Prompt for column '{column}' must be a string")
-        
-        if "schema" in instruction and not isinstance(instruction["schema"], dict):
-            errors.append(f"Schema for column '{column}' must be a dictionary")
-    
-    return errors
-
-
-class Example(BaseModel):
-    """
-    Example class for structured output testing.
-    """
-    year: List[int] = None
-    university: List[str] = None
-    job_title: str = None
+    def items(self):
+        return self.root.items()
