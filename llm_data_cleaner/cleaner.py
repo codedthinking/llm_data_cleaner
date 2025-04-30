@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from typing import Dict, Any, Type, List, Optional
 from openai import OpenAI
-from pydantic import BaseModel, RootModel, create_model
+from pydantic import BaseModel, RootModel, create_model, ConfigDict
 import time
 from tqdm import tqdm
 
@@ -241,5 +241,5 @@ def load_yaml_instructions(yaml_path:str = None) -> InstructionSchema:
                 annotations[field] = (t, None)
             else:
                 annotations[field] = (t, ...)
-        instructions[name] = dict(prompt=prompt, schema=create_model(name, **annotations, __base__=BaseModel, __config__=type('Config', (), {'extra': 'forbid'})))
+        instructions[name] = dict(prompt=prompt, schema=create_model(name, **annotations, __config__=ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})))
     return InstructionSchema(root=instructions)
