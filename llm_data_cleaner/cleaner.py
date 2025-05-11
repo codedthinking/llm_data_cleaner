@@ -22,12 +22,14 @@ class DataCleaner:
         retry_delay: int = 5,
         batch_size: int = 10,
         system_prompt: str = None,
+        temperature: float = 0.0,
     ):
         self.client = OpenAI(api_key=api_key)
         self.model = model
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.batch_size = batch_size
+        self.temperature = temperature
 
         # General system prompt format, set once for all tasks (you may tweak further)
         if system_prompt:
@@ -140,6 +142,7 @@ class DataCleaner:
                     model=self.model,
                     input=messages,
                     text_format=pyd_model_batch,
+                    temperature=self.temperature,
                 )
                 return resp.output_parsed
             except Exception as e:
