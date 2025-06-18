@@ -1,8 +1,16 @@
 # LLM Data Cleaner
 
-A Python package for cleaning data using OpenAI API. This package allows you to define cleaning instructions for each column in a CSV file and process them using OpenAI's language models.
+LLM Data Cleaner automates the transformation of messy text columns into well structured data using OpenAI models. It eliminates the need for complex regular expressions or manual parsing while ensuring the output conforms to a schema.
+
+## Why use it?
+
+- **Less manual work** – delegate repetitive cleaning tasks to a language model.
+- **Consistent results** – validate responses with Pydantic models.
+- **Batch processing** – send rows in chunks to respect API rate limits.
 
 ## Installation
+
+Requires **Python 3.9+**.
 
 ```bash
 pip install git+https://github.com/codedthinking/llm_data_cleaner.git
@@ -14,48 +22,77 @@ Or with Poetry:
 poetry add git+https://github.com/codedthinking/llm_data_cleaner.git
 ```
 
-## Usage
+## Step by step
+
+1. Create Pydantic models describing the cleaned values.
+2. Define a dictionary of instructions mapping column names to a prompt and schema.
+3. Instantiate `DataCleaner` with your OpenAI API key.
+4. Load your raw CSV file with `pandas`.
+5. Call `clean_dataframe(df, instructions)`.
+6. Inspect the returned DataFrame which contains new `cleaned_*` columns.
+7. Save or further process the cleaned data.
+
+## Example: inline models
 
 ```python
 import pandas as pd
+from pydantic import BaseModel
 from llm_data_cleaner import DataCleaner
 
-# Define cleaning instructions
-cleaning_instructions = {
-    "education": {
-        "prompt": "The rows below contain education experience of individuals residing in Hungary. Extract the year of higher education degree (may be None) and the precise, non abbreviated name of the university (may be None).",
-        "schema": {
-            "type": "object",
-            "properties": {
-                "year": {"type": ["integer", "null"]},
-                "university": {"type": ["string", "null"]}
-            },
-            "required": ["year", "university"]
-        }
+class AddressItem(BaseModel):
+    index: int
+    city: str | None
+    country: str | None
+    postal_code: str | None
+
+class TitleItem(BaseModel):
+    index: int
+    profession: str | None
+
+instructions = {
+    "address": {
+        "prompt": "Extract city, country and postal code if present.",
+        "schema": AddressItem,
     },
-    "job_title": {
-        "prompt": "Standardize the job title according to industry standards. Return the standardized job title."
-    }
+    "profession": {
+        "prompt": "Normalize the profession to a standard job title.",
+        "schema": TitleItem,
+    },
 }
 
-# Initialize the cleaner
-cleaner = DataCleaner(api_key="your-openai-api-key")
-
-# Clean the data
-df = pd.read_csv("your_data.csv")
-result = cleaner.clean_dataframe(df, cleaning_instructions)
-
-# Output results
-print(result)
+cleaner = DataCleaner(api_key="YOUR_OPENAI_API_KEY")
+raw_df = pd.DataFrame({
+    "address": ["Budapest Váci út 1", "1200 Vienna Mariahilfer Straße 10"],
+    "profession": ["dev", "data eng"]
+})
+cleaned = cleaner.clean_dataframe(raw_df, instructions)
+print(cleaned)
 ```
 
-## Features
+## Example: loading YAML instructions
 
-- Process CSV data using OpenAI API
-- Define custom cleaning prompts for each column
-- Optional JSON schema validation for responses
-- Batch processing to handle rate limits
-- Progress tracking with tqdm
+```python
+from llm_data_cleaner import DataCleaner, load_yaml_instructions
+import pandas as pd
+
+instructions = load_yaml_instructions("instructions.yaml")
+cleaner = DataCleaner(api_key="YOUR_OPENAI_API_KEY", system_prompt="{column_prompt}")
+raw_df = pd.read_csv("data.csv")
+result = cleaner.clean_dataframe(raw_df, instructions)
+```
+
+`load_yaml_instructions` reads the same structure shown above from a YAML file so
+cleaning rules can be shared without modifying code.
+
+## Authors
+
+- Miklós Koren
+- Gergely Attila Kiss
+
+## Preferred citation
+
+If you use **LLM Data Cleaner** in your research, please cite the project as
+specified in [`CITATION.cff`](./CITATION.cff).
 
 ## License
 

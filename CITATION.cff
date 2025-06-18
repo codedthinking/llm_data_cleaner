@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this package, please cite it."
+title: "LLM Data Cleaner"
+version: "0.4.3"
+authors:
+  - family-names: Koren
+    given-names: Miklós
+  - family-names: Kiss
+    given-names: Gergely Attila
+preferred-citation:
+  type: software
+  title: "LLM Data Cleaner"
+  version: "0.4.3"
+  url: "https://github.com/codedthinking/llm_data_cleaner"
+  authors:
+    - family-names: Koren
+      given-names: Miklós
+    - family-names: Kiss
+      given-names: Gergely Attila
