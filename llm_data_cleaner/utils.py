@@ -3,20 +3,23 @@ import pandas as pd
 from pydantic import BaseModel, RootModel
 import json
 
-def jsonize(data: Any) -> str:
-    """
-    Convert data to JSON string. Data may be a literal, a list of literals, a BaseModel, or a list of BaseModels. 
-    Dictionaries are not permitted.
-    Use proper JSON parsing, do not manually convert.
+def jsonize(data: Any) -> Any:
+    """Normalize ``data`` for storage.
+
+    - ``BaseModel`` instances and lists of ``BaseModel`` objects are converted to
+      JSON strings.
+    - Lists of primitive values are also JSON encoded so their structure is
+      preserved.
+    - All other values, including dictionaries and integers, are returned
+      unchanged.
 
     Args:
-        data: Data to be converted
+        data: The value to normalize.
 
     Returns:
-        JSON string representation of the data
+        The JSON string if conversion occurs, otherwise the original value.
     """
     if isinstance(data, list):
-        # Check if all elements are BaseModel instances
         if all(isinstance(item, BaseModel) for item in data):
             return json.dumps([item.dict() for item in data], ensure_ascii=False)
         else:
