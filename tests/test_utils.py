@@ -8,7 +8,7 @@ class Dummy(BaseModel):
 
 def test_jsonize_base_model():
     d = Dummy(x=1)
-    assert jsonize(d) == d.json()
+    assert jsonize(d) == d.model_dump_json()
 
 def test_jsonize_list_of_models():
     d1 = Dummy(x=1)

@@ -21,11 +21,11 @@ def jsonize(data: Any) -> Any:
     """
     if isinstance(data, list):
         if all(isinstance(item, BaseModel) for item in data):
-            return json.dumps([item.dict() for item in data], ensure_ascii=False)
+            return json.dumps([item.model_dump() for item in data], ensure_ascii=False)
         else:
             return json.dumps(data, ensure_ascii=False)
     elif isinstance(data, BaseModel):
-        return data.json()
+        return data.model_dump_json()
     else:
         return data
 
