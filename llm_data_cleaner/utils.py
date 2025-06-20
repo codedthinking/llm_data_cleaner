@@ -14,7 +14,7 @@ def jsonize(data: Any) -> Any:
       unchanged.
 
     Args:
-        data: The value to normalise.
+        data: The value to normalize.
 
     Returns:
         The JSON string if conversion occurs, otherwise the original value.
