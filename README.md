@@ -1,6 +1,6 @@
 # LLM Data Cleaner
 
-LLM Data Cleaner automates the transformation of messy text columns into well structured data using OpenAI models. It eliminates the need for complex regular expressions or manual parsing while ensuring the output conforms to a schema.
+LLM Data Cleaner automates the transformation of messy text columns into well structured data using LLM models via the LLM API. It eliminates the need for complex regular expressions or manual parsing while ensuring the output conforms to a schema.
 
 ## Why use it?
 
@@ -10,23 +10,40 @@ LLM Data Cleaner automates the transformation of messy text columns into well st
 
 ## Installation
 
-Requires **Python 3.9+**.
+Requires **Python 3.9+** and the LLM API.
 
 ```bash
 pip install git+https://github.com/codedthinking/llm_data_cleaner.git
+pip install llm
 ```
 
 Or with Poetry:
 
 ```bash
 poetry add git+https://github.com/codedthinking/llm_data_cleaner.git
+poetry add llm
 ```
+
+## Setup
+
+The LLM API requires model configuration. For OpenAI models:
+
+```bash
+# Install the OpenAI plugin for LLM
+llm install llm-openai
+
+# Set your API key
+llm keys set openai
+# Enter your OpenAI API key when prompted
+```
+
+For other providers, see the [LLM documentation](https://llm.datasette.io/en/stable/other-models.html).
 
 ## Step by step
 
 1. Create Pydantic models describing the cleaned values.
 2. Define a dictionary of instructions mapping column names to a prompt and schema.
-3. Instantiate `DataCleaner` with your OpenAI API key.
+3. Instantiate `DataCleaner` with your preferred model (no API key needed - handled by LLM).
 4. Load your raw CSV file with `pandas`.
 5. Call `clean_dataframe(df, instructions)`.
 6. Inspect the returned DataFrame which contains new `cleaned_*` columns.
@@ -60,7 +77,7 @@ instructions = {
     },
 }
 
-cleaner = DataCleaner(api_key="YOUR_OPENAI_API_KEY")
+cleaner = DataCleaner(model="gpt-4o-mini")  # or any LLM-supported model
 raw_df = pd.DataFrame({
     "address": ["Budapest Váci út 1", "1200 Vienna Mariahilfer Straße 10"],
     "profession": ["dev", "data eng"]
@@ -76,7 +93,7 @@ from llm_data_cleaner import DataCleaner, load_yaml_instructions
 import pandas as pd
 
 instructions = load_yaml_instructions("instructions.yaml")
-cleaner = DataCleaner(api_key="YOUR_OPENAI_API_KEY", system_prompt="{column_prompt}")
+cleaner = DataCleaner(model="gpt-4o-mini", system_prompt="{column_prompt}")
 raw_df = pd.read_csv("data.csv")
 result = cleaner.clean_dataframe(raw_df, instructions)
 ```

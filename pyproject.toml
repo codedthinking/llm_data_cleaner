@@ -1,14 +1,14 @@
 [tool.poetry]
 name = "llm_data_cleaner"
-version = "0.4.3"
-description = "A Python package for cleaning data using OpenAI API"
+version = "0.5.0"
+description = "A Python package for cleaning data using LLM API"
 authors = ["Miklós Koren <koren@codedthinking.com>", "Gergely Attila Kiss <kiss@codedthinking.com>"]
 readme = "README.md"
 packages = [{include = "llm_data_cleaner"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-openai = "^1.0.0"
+llm = "^0.15.0"
 pydantic = "^2.0.0"
 jsonschema = "^4.0.0"
 tqdm = "^4.65.0"

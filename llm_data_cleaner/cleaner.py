@@ -1,7 +1,8 @@
 import os
 import pandas as pd
 from typing import Dict, Any, Type, List, Optional
-from openai import OpenAI
+import llm
+import json
 from pydantic import BaseModel, create_model, ConfigDict
 from llm_data_cleaner.utils import InstructionField, InstructionSchema
 import time
@@ -11,21 +12,20 @@ from .utils import jsonize
 
 class DataCleaner:
     """
-    Batch DataCleaner that uses OpenAI's responses.parse method with auto-generated prompts.
+    Batch DataCleaner that uses LLM API with structured output for data cleaning.
     """
 
     def __init__(
         self,
-        api_key: str,
-        model: str = "gpt-4o-2024-08-06",
+        model: str = "gpt-4o-mini",
         max_retries: int = 3,
         retry_delay: int = 5,
         batch_size: int = 10,
         system_prompt: str = None,
         temperature: float = 0.0,
     ):
-        self.client = OpenAI(api_key=api_key)
-        self.model = model
+        self.model_name = model
+        self.model = llm.get_model(model)
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.batch_size = batch_size
@@ -118,7 +118,7 @@ class DataCleaner:
             if item is None:
                 continue
             index = item.index
-            for fname in item.model_fields:
+            for fname in item.__class__.model_fields:
                 if fname != "index":
                     colname = f"cleaned_{fname}"
                     if colname not in result_batch.columns:
@@ -138,13 +138,21 @@ class DataCleaner:
     ):
         for attempt in range(self.max_retries):
             try:
-                resp = self.client.responses.parse(
-                    model=self.model,
-                    input=messages,
-                    text_format=pyd_model_batch,
-                    temperature=self.temperature,
-                )
-                return resp.output_parsed
+                # Combine system and user messages into a single prompt
+                system_content = messages[0]["content"] if messages[0]["role"] == "system" else ""
+                user_content = messages[1]["content"] if len(messages) > 1 and messages[1]["role"] == "user" else ""
+                
+                full_prompt = f"{system_content}\n\nData to process: {user_content}"
+                
+                # Use LLM API with Pydantic schema for structured output
+                response = self.model.prompt(full_prompt, schema=pyd_model_batch, temperature=self.temperature)
+                
+                # Parse the JSON response
+                parsed_data = json.loads(response.text())
+                
+                # Convert to the expected Pydantic model instance
+                return pyd_model_batch(**parsed_data)
+                
             except Exception as e:
                 print(f"Batch cleaning error: {e} (attempt {attempt+1}/{self.max_retries})")
                 time.sleep(self.retry_delay)

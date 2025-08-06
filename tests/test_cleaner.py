@@ -6,118 +6,80 @@ from unittest.mock import patch, MagicMock
 import pandas as pd
 
 from llm_data_cleaner import DataCleaner
-from llm_data_cleaner.utils import batch_dataframe, validate_instructions
+from llm_data_cleaner.utils import jsonize
 
 
 class TestUtils(unittest.TestCase):
-    def test_batch_dataframe(self):
-        # Create a test DataFrame
-        df = pd.DataFrame({"A": range(10)})
+    def test_jsonize(self):
+        from pydantic import BaseModel
         
-        # Test with batch size equal to DataFrame size
-        batches = batch_dataframe(df, 10)
-        self.assertEqual(len(batches), 1)
-        self.assertEqual(len(batches[0]), 10)
+        # Test with BaseModel
+        class TestModel(BaseModel):
+            name: str
+            age: int
+            
+        model = TestModel(name="John", age=30)
+        result = jsonize(model)
+        self.assertIsInstance(result, str)
         
-        # Test with batch size smaller than DataFrame size
-        batches = batch_dataframe(df, 3)
-        self.assertEqual(len(batches), 4)  # 3 + 3 + 3 + 1 = 10
-        self.assertEqual(len(batches[0]), 3)
-        self.assertEqual(len(batches[-1]), 1)
-        
-        # Test with batch size larger than DataFrame size
-        batches = batch_dataframe(df, 20)
-        self.assertEqual(len(batches), 1)
-        self.assertEqual(len(batches[0]), 10)
-    
-    def test_validate_instructions(self):
-        # Valid instructions
-        valid_instructions = {
-            "column1": {
-                "prompt": "Clean this data"
-            },
-            "column2": {
-                "prompt": "Clean this data",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "value": {"type": "string"}
-                    }
-                }
-            }
-        }
-        errors = validate_instructions(valid_instructions)
-        self.assertEqual(len(errors), 0)
-        
-        # Invalid instructions
-        invalid_instructions = {
-            123: {  # Non-string column name
-                "prompt": "Clean this data"
-            },
-            "column2": "not a dict",  # Non-dict instruction
-            "column3": {  # Missing prompt
-                "schema": {}
-            },
-            "column4": {  # Non-string prompt
-                "prompt": 123
-            },
-            "column5": {  # Non-dict schema
-                "prompt": "Clean this data",
-                "schema": "invalid"
-            }
-        }
-        errors = validate_instructions(invalid_instructions)
-        self.assertEqual(len(errors), 5)
+        # Test with primitive values
+        self.assertEqual(jsonize("test"), "test")
+        self.assertEqual(jsonize(42), 42)
+        self.assertEqual(jsonize({"key": "value"}), {"key": "value"})
 
 
 class TestDataCleaner(unittest.TestCase):
-    @patch('llm_data_cleaner.cleaner.OpenAI')
-    def test_clean_dataframe(self, mock_openai):
-        # Create a mock response
-        mock_completion = MagicMock()
-        mock_completion.choices[0].message.content = json.dumps({"year": 2020, "university": "Example University"})
+    @patch('llm_data_cleaner.cleaner.llm.get_model')
+    def test_clean_dataframe(self, mock_get_model):
+        # Create a mock model response
+        mock_response = MagicMock()
+        mock_response.text.return_value = json.dumps({
+            "cleaned": [
+                {"index": 0, "year": 2020, "university": "Example University"}
+            ]
+        })
         
-        # Set up the mock client
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = mock_completion
-        mock_openai.return_value = mock_client
+        # Set up the mock model
+        mock_model = MagicMock()
+        mock_model.prompt.return_value = mock_response
+        mock_get_model.return_value = mock_model
         
         # Create a test DataFrame
         df = pd.DataFrame({
             "education": ["Graduated from Example University in 2020"]
         })
         
-        # Create cleaning instructions
+        # Create cleaning instructions using the new InstructionSchema format
+        from pydantic import BaseModel, Field
+        from typing import Optional
+        
+        class EducationData(BaseModel):
+            index: int
+            year: Optional[int] = None
+            university: Optional[str] = None
+        
         instructions = {
             "education": {
                 "prompt": "Extract year and university name",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "year": {"type": ["integer", "null"]},
-                        "university": {"type": ["string", "null"]}
-                    },
-                    "required": ["year", "university"]
-                }
+                "schema": EducationData
             }
         }
         
-        # Initialize the cleaner
-        cleaner = DataCleaner(api_key="dummy-key")
+        # Initialize the cleaner (no api_key needed for LLM API)
+        cleaner = DataCleaner(model="gpt-4o-mini")
         
         # Clean the data
         result = cleaner.clean_dataframe(df, instructions)
         
-        # Assertions
-        self.assertIn("original_education", result.columns)
-        self.assertIn("cleaned_education", result.columns)
+        # Check that the model was called
+        mock_get_model.assert_called_once_with("gpt-4o-mini")
+        mock_model.prompt.assert_called()
         
-        # Check the API was called with the correct arguments
-        mock_client.chat.completions.create.assert_called_once()
-        call_args = mock_client.chat.completions.create.call_args[1]
-        self.assertEqual(call_args["model"], "gpt-4o")
-        self.assertEqual(call_args["temperature"], 0.0)
-        self.assertEqual(call_args["response_format"], {"type": "json_object"})
+        # Verify the call arguments
+        call_args = mock_model.prompt.call_args
+        self.assertIn("schema", call_args[1])
+        self.assertIn("temperature", call_args[1])
+        self.assertEqual(call_args[1]["temperature"], 0.0)
 
 
 if __name__ == "__main__":
