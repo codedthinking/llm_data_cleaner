@@ -19,12 +19,13 @@ class JobTitleItem(BaseModel):
 
 yaml_instructions = load_yaml_instructions("instructions.yaml")
 
-# Set your OpenAI API key, reading from .secrets/OPENAI_API_KEY
+# Set your API key, reading from .secrets/OPENAI_API_KEY
+# You can use OpenAI, OpenRouter, Anthropic, or other providers
 with open(".secrets/OPENAI_API_KEY", "r") as f:
     api_key = f.read().strip()
 # Ensure the API key is set
 if not api_key:
-    raise ValueError("API key is not set. Please provide a valid OpenAI API key.")
+    raise ValueError("API key is not set. Please provide a valid API key.")
 # Create a sample DataFrame
 data = {
     "education": [
@@ -61,11 +62,20 @@ instructions = {
     },
 }
 # Initialize the cleaner with a batch size (default is 20)
+# For OpenAI (default):
 cleaner = DataCleaner(
-    api_key=api_key, 
-    batch_size=20, 
+    api_key=api_key,
+    batch_size=20,
     system_prompt='Follow these instructions, but return the answers in Greek. {column_prompt}.',
 )
+
+# For OpenRouter, you would use:
+# cleaner = DataCleaner(
+#     api_key="your-openrouter-key",
+#     model="openrouter/anthropic/claude-3-opus",
+#     api_base="https://openrouter.ai/api/v1",
+#     batch_size=20
+# )
 
 # Clean the data
 

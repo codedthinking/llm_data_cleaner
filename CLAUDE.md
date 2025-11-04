@@ -2,10 +2,11 @@
 
 ## Project Overview
 
-**LLM Data Cleaner** is a Python package that automates the transformation of messy text columns into well-structured data using OpenAI models. It eliminates the need for complex regular expressions or manual parsing while ensuring output conforms to a schema.
+**LLM Data Cleaner** is a Python package that automates the transformation of messy text columns into well-structured data using LLM APIs. It supports **OpenAI, OpenRouter, Anthropic, and 100+ other providers** through LiteLLM. The package eliminates the need for complex regular expressions or manual parsing while ensuring output conforms to a schema.
 
 ### Key Features
-- **Automated data cleaning** using OpenAI's language models
+- **Provider-agnostic** - Works with OpenAI, OpenRouter, Anthropic, and 100+ providers via LiteLLM
+- **Automated data cleaning** using language models
 - **Schema validation** with Pydantic models
 - **Batch processing** to respect API rate limits
 - **YAML-based configuration** for reusable cleaning instructions
@@ -37,24 +38,27 @@ The main class that orchestrates data cleaning operations.
 
 **Key Responsibilities:**
 - Batch processing of DataFrame columns
-- Communication with OpenAI API using structured outputs
+- Communication with LLM APIs using LiteLLM for provider-agnostic access
+- Structured output parsing with JSON mode and Pydantic validation
 - Retry logic for failed API calls
 - Progress tracking with tqdm
 
 **Important Methods:**
 - `clean_dataframe(df, instructions)` - Main entry point for cleaning data
 - `_process_batch()` - Processes a single batch of rows
-- `_clean_batch()` - Makes API calls with retry logic
+- `_clean_batch()` - Makes API calls with retry logic using LiteLLM
 - `_make_batch_model()` - Creates Pydantic models for batch responses
 
 **Configuration Parameters:**
-- `api_key`: OpenAI API key (required)
-- `model`: Model to use (default: "gpt-4o-2024-08-06")
+- `api_key`: API key for the LLM provider (optional if set via environment variables)
+- `model`: Model name (default: "gpt-4o-2024-08-06"). Use provider prefixes for non-OpenAI models (e.g., "openrouter/anthropic/claude-3-opus")
 - `batch_size`: Number of rows per API call (default: 10)
 - `max_retries`: Retry attempts for failed calls (default: 3)
 - `retry_delay`: Seconds between retries (default: 5)
 - `temperature`: Model temperature (default: 0.0)
 - `system_prompt`: Custom system prompt template (optional)
+- `api_base`: Base URL for the API (e.g., "https://openrouter.ai/api/v1" for OpenRouter)
+- `**litellm_kwargs`: Additional arguments to pass to litellm.completion()
 
 ### 2. Utilities (`llm_data_cleaner/utils.py`)
 
@@ -91,7 +95,7 @@ column_name:
 ## Dependencies
 
 ### Production
-- `openai ^1.0.0` - OpenAI API client
+- `litellm ^1.0.0` - Unified API client for 100+ LLM providers (OpenAI, OpenRouter, Anthropic, etc.)
 - `pydantic ^2.0.0` - Data validation and schema definition
 - `pandas ^2.2.3` - DataFrame operations
 - `pyyaml ^6.0.2` - YAML parsing
@@ -164,12 +168,22 @@ Test files are located in `tests/`:
 
 ### Common Issues
 
-1. **API Key Not Set**: Store OpenAI API key in `.secrets/OPENAI_API_KEY` or pass directly
+1. **API Key Not Set**: Set API key via environment variables (OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY) or pass directly to constructor
 2. **Rate Limits**: Adjust `batch_size` to control API call frequency
 3. **Schema Validation Errors**: Ensure Pydantic models include `index: int` field
 4. **Missing Columns**: DataCleaner skips columns not in DataFrame with a warning
+5. **Provider-specific Configuration**: Use `api_base` parameter for custom endpoints (e.g., OpenRouter)
+6. **Model Naming**: Use provider prefixes for non-OpenAI models (e.g., "openrouter/model-name", "anthropic/model-name")
 
 ## API Changes
+
+### Version 0.5.0
+- **BREAKING**: Migrated from OpenAI library to LiteLLM for provider-agnostic support
+- Now supports OpenAI, OpenRouter, Anthropic, and 100+ other providers
+- Added `api_base` parameter for custom API endpoints
+- Added `**litellm_kwargs` for provider-specific configuration
+- API key is now optional in constructor (can use environment variables)
+- Model parameter now supports provider prefixes (e.g., "openrouter/", "anthropic/")
 
 ### Version 0.4.x
 - Migrated from deprecated `client.responses.parse()` to supported OpenAI methods
@@ -184,10 +198,31 @@ Test files are located in `tests/`:
 
 1. **Define schemas** (Pydantic or YAML)
 2. **Create instructions** dictionary mapping columns to prompts and schemas
-3. **Initialize DataCleaner** with API key and configuration
+3. **Initialize DataCleaner** with API key, model name, and configuration
 4. **Load data** into pandas DataFrame
 5. **Call `clean_dataframe()`** to process
 6. **Access results** in `cleaned_*` columns
+
+### Provider-Specific Examples
+
+**OpenAI (default):**
+```python
+cleaner = DataCleaner(api_key="sk-...", model="gpt-4o-2024-08-06")
+```
+
+**OpenRouter:**
+```python
+cleaner = DataCleaner(
+    api_key="sk-or-...",
+    model="openrouter/anthropic/claude-3-opus",
+    api_base="https://openrouter.ai/api/v1"
+)
+```
+
+**Anthropic:**
+```python
+cleaner = DataCleaner(api_key="sk-ant-...", model="claude-3-opus-20240229")
+```
 
 ## Authors
 - Miklós Koren (koren@codedthinking.com)

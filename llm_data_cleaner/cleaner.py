@@ -1,35 +1,81 @@
 import os
 import pandas as pd
 from typing import Dict, Any, Type, List, Optional
-from openai import OpenAI
+import litellm
 from pydantic import BaseModel, create_model, ConfigDict
 from llm_data_cleaner.utils import InstructionField, InstructionSchema
 import time
 from tqdm import tqdm
 from .utils import jsonize
+import json
 
 
 class DataCleaner:
     """
-    Batch DataCleaner that uses OpenAI's responses.parse method with auto-generated prompts.
+    Batch DataCleaner that uses LiteLLM for provider-agnostic LLM API calls with auto-generated prompts.
+    Supports OpenAI, OpenRouter, Anthropic, and 100+ other providers.
     """
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str = None,
         model: str = "gpt-4o-2024-08-06",
         max_retries: int = 3,
         retry_delay: int = 5,
         batch_size: int = 10,
         system_prompt: str = None,
         temperature: float = 0.0,
+        api_base: str = None,
+        **litellm_kwargs,
     ):
-        self.client = OpenAI(api_key=api_key)
+        """
+        Initialize DataCleaner with LiteLLM support for multiple providers.
+
+        Args:
+            api_key: API key for the LLM provider (can also be set via environment variables)
+            model: Model name (e.g., "gpt-4o-2024-08-06" for OpenAI, "openrouter/model-name" for OpenRouter)
+            max_retries: Number of retry attempts for failed API calls
+            retry_delay: Delay in seconds between retries
+            batch_size: Number of rows to process per API call
+            system_prompt: Custom system prompt template (must contain {column_prompt})
+            temperature: Model temperature for generation
+            api_base: Base URL for the API (e.g., for OpenRouter: "https://openrouter.ai/api/v1")
+            **litellm_kwargs: Additional arguments to pass to litellm.completion()
+
+        Examples:
+            # OpenAI (default)
+            cleaner = DataCleaner(api_key="sk-...")
+
+            # OpenRouter
+            cleaner = DataCleaner(
+                api_key="sk-or-...",
+                model="openrouter/anthropic/claude-3-opus",
+                api_base="https://openrouter.ai/api/v1"
+            )
+
+            # Anthropic
+            cleaner = DataCleaner(api_key="sk-ant-...", model="claude-3-opus-20240229")
+        """
+        self.api_key = api_key
         self.model = model
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.batch_size = batch_size
         self.temperature = temperature
+        self.api_base = api_base
+        self.litellm_kwargs = litellm_kwargs
+
+        # Set API key in environment if provided (LiteLLM reads from env vars)
+        if api_key:
+            # LiteLLM automatically detects the provider from the model name
+            # and uses the appropriate environment variable
+            if model.startswith("openrouter/"):
+                os.environ["OPENROUTER_API_KEY"] = api_key
+            elif model.startswith("anthropic/") or "claude" in model.lower():
+                os.environ["ANTHROPIC_API_KEY"] = api_key
+            else:
+                # Default to OpenAI
+                os.environ["OPENAI_API_KEY"] = api_key
 
         # General system prompt format, set once for all tasks (you may tweak further)
         if system_prompt:
@@ -136,15 +182,46 @@ class DataCleaner:
         messages: list,
         pyd_model_batch: Type[BaseModel]
     ):
+        """
+        Clean a batch using LiteLLM completion API with JSON mode.
+        Parses the response back into the Pydantic model.
+        """
         for attempt in range(self.max_retries):
             try:
-                resp = self.client.responses.parse(
-                    model=self.model,
-                    input=messages,
-                    text_format=pyd_model_batch,
-                    temperature=self.temperature,
-                )
-                return resp.output_parsed
+                # Get JSON schema from Pydantic model for the prompt
+                schema_json = pyd_model_batch.model_json_schema()
+
+                # Enhance system message with schema information
+                enhanced_messages = messages.copy()
+                enhanced_messages[0] = {
+                    "role": "system",
+                    "content": f"{messages[0]['content']}\n\nYou must respond with valid JSON matching this schema:\n{json.dumps(schema_json, indent=2)}"
+                }
+
+                # Prepare LiteLLM completion arguments
+                completion_kwargs = {
+                    "model": self.model,
+                    "messages": enhanced_messages,
+                    "temperature": self.temperature,
+                    "response_format": {"type": "json_object"},
+                    **self.litellm_kwargs
+                }
+
+                # Add api_base if provided
+                if self.api_base:
+                    completion_kwargs["api_base"] = self.api_base
+
+                # Call LiteLLM
+                response = litellm.completion(**completion_kwargs)
+
+                # Parse JSON response
+                content = response.choices[0].message.content
+                parsed_json = json.loads(content)
+
+                # Convert JSON to Pydantic model
+                parsed_model = pyd_model_batch.model_validate(parsed_json)
+
+                return parsed_model
             except Exception as e:
                 print(f"Batch cleaning error: {e} (attempt {attempt+1}/{self.max_retries})")
                 time.sleep(self.retry_delay)
