@@ -71,51 +71,53 @@ class TestUtils(unittest.TestCase):
 
 
 class TestDataCleaner(unittest.TestCase):
-    @patch('llm_data_cleaner.cleaner.OpenAI')
-    def test_clean_dataframe(self, mock_openai):
-        # Create a mock response
-        mock_completion = MagicMock()
-        mock_completion.choices[0].message.content = json.dumps({"year": 2020, "university": "Example University"})
-        
-        # Set up the mock client
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = mock_completion
-        mock_openai.return_value = mock_client
-        
+    @patch('llm_data_cleaner.cleaner.litellm.completion')
+    def test_clean_dataframe(self, mock_completion):
+        # Create a mock response matching LiteLLM's response structure
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = json.dumps({
+            "cleaned": [
+                {"index": 0, "year": 2020, "university": "Example University"}
+            ]
+        })
+        mock_completion.return_value = mock_response
+
         # Create a test DataFrame
         df = pd.DataFrame({
             "education": ["Graduated from Example University in 2020"]
         })
-        
+
+        # Create Pydantic model for testing
+        from pydantic import BaseModel
+
+        class EducationItem(BaseModel):
+            index: int
+            year: int | None
+            university: str | None
+
         # Create cleaning instructions
         instructions = {
             "education": {
                 "prompt": "Extract year and university name",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "year": {"type": ["integer", "null"]},
-                        "university": {"type": ["string", "null"]}
-                    },
-                    "required": ["year", "university"]
-                }
+                "schema": EducationItem
             }
         }
-        
+
         # Initialize the cleaner
         cleaner = DataCleaner(api_key="dummy-key")
-        
+
         # Clean the data
         result = cleaner.clean_dataframe(df, instructions)
-        
+
         # Assertions
-        self.assertIn("original_education", result.columns)
-        self.assertIn("cleaned_education", result.columns)
-        
-        # Check the API was called with the correct arguments
-        mock_client.chat.completions.create.assert_called_once()
-        call_args = mock_client.chat.completions.create.call_args[1]
-        self.assertEqual(call_args["model"], "gpt-4o")
+        self.assertIn("cleaned_year", result.columns)
+        self.assertIn("cleaned_university", result.columns)
+
+        # Check the API was called
+        mock_completion.assert_called()
+        call_args = mock_completion.call_args[1]
+        self.assertEqual(call_args["model"], "gpt-4o-2024-08-06")
         self.assertEqual(call_args["temperature"], 0.0)
         self.assertEqual(call_args["response_format"], {"type": "json_object"})
 
